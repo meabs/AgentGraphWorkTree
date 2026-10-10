@@ -1,0 +1,4 @@
+name: agent-graph
+version: 0.1.0
+description: Deterministic, confidence-tagged code graph and notes for Java repositories, generated into the work tree so agents can query structure instead of reading files
+author: garry
