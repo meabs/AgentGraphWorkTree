@@ -36,8 +36,16 @@ jobs:
           python .agent-knowledge/kg.py show demo.B > show.txt
           grep -q "two" show.txt
           python ../.apm/skills/agent-graph/install.py --repo . --home "$RUNNER_TEMP/ag"
+          test -f "$(git rev-parse --git-path hooks)/pre-commit"
+          git config user.email ci@example.com && git config user.name ci
+          git add -A && git commit -q -m graph
+          printf 'package demo;\n\npublic class C {\n\tpublic int three() { return new B().two(); }\n}\n' > src/main/java/demo/C.java
+          git add src && git commit -q -m "add C"
+          git show --name-only --format= HEAD | grep -q "claims.jsonl"
+          python .agent-knowledge/kg.py show demo.C | grep -q "three"
           python ../.apm/skills/agent-graph/install.py --repo . --uninstall
           test ! -e .agent-knowledge
+          test ! -e "$(git rev-parse --git-path hooks)/pre-commit"
       - name: Python repository smoke test
         shell: bash
         run: |

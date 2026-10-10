@@ -2,7 +2,7 @@
 """Generate the code graph and notes for a Java, Python, TypeScript or JavaScript repository and tell agents to use them (Windows, macOS, Linux).
 
   python install.py --repo PATH [--home DIR] [--labels confidence|tags|instruction] [--no-agents-md]
-                    [--harness claude,copilot,cursor|none] [--uninstall]
+                    [--harness claude,copilot,cursor|none] [--no-hooks] [--ci check|sync] [--uninstall]
 
 The tool is copied to --home (default: ~/.local/share/agent-graph, %LOCALAPPDATA%\\agent-graph on Windows)
 with its own virtual environment, so nothing is installed into your global Python.
@@ -25,6 +25,124 @@ OUT = ".agent-knowledge"
 BEGIN, END = "<!-- agent-graph:begin -->", "<!-- agent-graph:end -->"
 CURSOR_RULE = ".cursor/rules/generated-knowledge.mdc"
 CURSOR_HEAD = "---\ndescription: Use the generated repository knowledge and code graph\nalwaysApply: true\n---\n\n"
+
+HOOK_BEGIN, HOOK_END = "# agent-graph:begin", "# agent-graph:end"
+SOURCE_PATTERN = r"\.(java|py|ts|tsx|js|jsx|mjs|cjs|mts|cts)$|(^|/)(pom\.xml|package\.json|tsconfig[^/]*\.json|jsconfig\.json)$"
+WORKFLOW = ".github/workflows/agent-graph.yml"
+REPO_URL = "meabs/AgentGraphWorkTree"
+
+
+def tool_version() -> str:
+    m = re.search(r'VERSION = "([^"]+)"', (TOOL / "kgen" / "__init__.py").read_text(encoding="utf-8"))
+    return m.group(1) if m else "main"
+
+
+def hooks_dir(repo: Path) -> Path:
+    return Path(run("git", "-C", str(repo), "rev-parse", "--path-format=absolute", "--git-path", "hooks", capture_output=True).stdout.strip())
+
+
+def hook_block(name: str, launcher: str, labels: str) -> str:
+    sync = f'"{launcher}" sync --repo "$(git rev-parse --show-toplevel)" --labels {labels} >/dev/null 2>&1'
+    if name == "pre-commit":
+        body = (f"if git diff --cached --name-only | grep -Eq '{SOURCE_PATTERN}'; then\n"
+                f"  {sync} && git add {OUT} || true\nfi\n")
+    elif name == "post-checkout":  # $3 is 1 for a branch switch, 0 for a single-file checkout
+        body = f'if [ "${{3:-1}}" = "1" ]; then\n  {sync} || true\nfi\n'
+    else:
+        body = f"{sync} || true\n"
+    return f"{HOOK_BEGIN}\n[ -x \"{launcher}\" ] || exit 0\n{body}{HOOK_END}\n"
+
+
+def put_hook(path: Path, block: str) -> bool:
+    """Insert or refresh our block in a git hook; any other content of the hook is kept."""
+    existing = path.read_text(encoding="utf-8") if path.exists() else ""
+    pattern = re.escape(HOOK_BEGIN) + r".*?" + re.escape(HOOK_END) + r"\n?"
+    if HOOK_BEGIN in existing:
+        new = re.sub(pattern, lambda _: block, existing, flags=re.S)
+    elif existing:
+        new = existing + ("" if existing.endswith("\n") else "\n") + block
+    else:
+        new = "#!/bin/sh\n" + block
+    if new == existing:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(new, encoding="utf-8", newline="\n")
+    path.chmod(0o755)
+    return True
+
+
+def drop_hook(path: Path) -> bool:
+    if not path.exists():
+        return False
+    text = path.read_text(encoding="utf-8")
+    new = re.sub(r"\n?" + re.escape(HOOK_BEGIN) + r".*?" + re.escape(HOOK_END) + r"\n?", "", text, flags=re.S)
+    if new == text:
+        return False
+    if new.strip() in ("", "#!/bin/sh"):
+        path.unlink()
+    else:
+        path.write_text(new.rstrip("\n") + "\n", encoding="utf-8", newline="\n")
+    return True
+
+
+HOOKS = ("post-merge", "post-checkout", "post-rewrite", "pre-commit")
+
+
+def workflow_text(mode: str, labels: str) -> str:
+    setup = f"""      - uses: actions/checkout@v4
+        with:
+{"          ref: ${{ github.head_ref || github.ref_name }}" + chr(10) if mode == "sync" else ""}          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          repository: {REPO_URL}
+          ref: v{tool_version()}
+          path: .agent-graph-tool
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install tree-sitter tree-sitter-java tree-sitter-typescript
+"""
+    kgen = "python .agent-graph-tool/.apm/skills/agent-graph/tool/kgen.py"
+    if mode == "check":
+        return f"""name: agent-graph
+on:
+  pull_request:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+{setup}      - name: Fail if the code graph is out of date
+        run: {kgen} check --repo .
+"""
+    return f"""name: agent-graph
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+concurrency:
+  group: agent-graph-sync
+  cancel-in-progress: false
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+    steps:
+{setup}      - name: Regenerate the code graph
+        run: {kgen} sync --repo . --labels {labels}
+      - name: Commit it if the claims changed
+        run: |
+          if [ -n "$(git status --porcelain -- {OUT}/claims.jsonl)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add {OUT}
+            git commit -m "Refresh {OUT}"
+            git pull --rebase
+            git push
+          else
+            echo "code graph unchanged"
+          fi
+"""
 
 
 def default_home() -> Path:
@@ -109,6 +227,14 @@ def uninstall(repo: Path) -> int:
     for rel in ("AGENTS.md", ".github/copilot-instructions.md", CURSOR_RULE):
         if drop_block(repo / rel):
             print(f"removed the generated-knowledge block from {rel}")
+    hd = hooks_dir(repo)
+    for name in HOOKS:
+        if drop_hook(hd / name):
+            print(f"removed the {name} hook block")
+    wf = repo / WORKFLOW
+    if wf.exists() and ".agent-graph-tool" in wf.read_text(encoding="utf-8"):
+        wf.unlink()
+        print(f"removed {WORKFLOW}")
     claude = repo / "CLAUDE.md"
     if claude.exists() and claude.read_text(encoding="utf-8").strip() == "@AGENTS.md" and not (repo / "AGENTS.md").exists():
         claude.unlink()
@@ -125,6 +251,8 @@ def main() -> int:
                     help="how generated facts are marked for agents; the default is the tested one (tags plus the trust-the-source instruction)")
     ap.add_argument("--no-agents-md", action="store_true", help="generate the files but do not edit AGENTS.md or the other instruction files")
     ap.add_argument("--harness", default="claude,copilot,cursor", help="extra instruction files besides AGENTS.md (Codex reads AGENTS.md): any of claude, copilot, cursor, or none")
+    ap.add_argument("--no-hooks", action="store_true", help="do not install the git hooks that refresh the graph after pull, checkout and rebase, and on commit")
+    ap.add_argument("--ci", choices=("check", "sync"), help="also write a GitHub Actions workflow: check fails pull requests when the graph is stale; sync regenerates it on pushes to main and commits the result")
     ap.add_argument("--uninstall", action="store_true", help="remove .agent-knowledge/ and the instruction blocks from this repository")
     args = ap.parse_args()
 
@@ -182,6 +310,17 @@ def main() -> int:
             written.append(CURSOR_RULE)
         if written:
             print("wrote the instructions to: " + ", ".join(written) + " (review and commit)")
+    if not args.no_hooks:
+        launcher = (home / "bin" / "kgen").as_posix()
+        hd = hooks_dir(repo)
+        changed = [name for name in HOOKS if put_hook(hd / name, hook_block(name, launcher, args.labels))]
+        if changed:
+            print("installed git hooks that keep the graph fresh: " + ", ".join(changed) + f" (in {hd}; hooks are per clone, so each teammate runs the installer)")
+    if args.ci:
+        wf = repo / WORKFLOW
+        wf.parent.mkdir(parents=True, exist_ok=True)
+        wf.write_text(workflow_text(args.ci, args.labels), encoding="utf-8", newline="\n")
+        print(f"wrote {WORKFLOW} ({args.ci}); commit it")
     print(f"done. Commit {OUT}/ so agents and teammates get it. Refresh after code changes with: {home / 'bin' / ('kgen.cmd' if os.name == 'nt' else 'kgen')} sync --repo {repo}")
     return 0
 

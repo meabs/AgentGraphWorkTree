@@ -42,7 +42,7 @@ def cmd_check(a):
     if not stale and not new:
         print("up to date")
         return 0
-    print("run: uv run kgen.py sync --repo", a.repo)
+    print("run: kgen sync --repo", a.repo)
     return 1
 
 

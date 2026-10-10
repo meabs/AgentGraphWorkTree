@@ -41,3 +41,30 @@ def test_launchers_name_both_shells(tmp_path: Path):
     inst.write_launchers(tmp_path, tmp_path / "venv" / "bin" / "python")
     assert (tmp_path / "bin" / "kgen").read_bytes().startswith(b"#!/bin/sh\nexec ")
     assert b"%*" in (tmp_path / "bin" / "kgen.cmd").read_bytes()
+
+
+def test_hook_block_keeps_existing_hook_content_and_is_removed_cleanly(tmp_path: Path):
+    hook = tmp_path / "pre-commit"
+    hook.write_text("#!/bin/sh\necho mine\n", encoding="utf-8")
+    block = inst.hook_block("pre-commit", "/x/bin/kgen", "confidence")
+    assert inst.put_hook(hook, block) and not inst.put_hook(hook, block)
+    text = hook.read_text(encoding="utf-8")
+    assert text.startswith("#!/bin/sh\necho mine\n") and text.count(inst.HOOK_BEGIN) == 1 and "git add .agent-knowledge" in text
+    assert inst.drop_hook(hook) and hook.read_text(encoding="utf-8") == "#!/bin/sh\necho mine\n"
+
+
+def test_hook_we_created_is_deleted_on_removal_and_post_checkout_ignores_file_checkouts(tmp_path: Path):
+    hook = tmp_path / "post-checkout"
+    inst.put_hook(hook, inst.hook_block("post-checkout", "/x/bin/kgen", "tags"))
+    text = hook.read_text(encoding="utf-8")
+    assert text.startswith("#!/bin/sh\n") and '"${3:-1}" = "1"' in text and "--labels tags" in text
+    assert inst.drop_hook(hook) and not hook.exists()
+
+
+def test_generated_workflows_are_valid_yaml_in_both_modes():
+    yaml = __import__("pytest").importorskip("yaml")
+    for mode in ("check", "sync"):
+        doc = yaml.safe_load(inst.workflow_text(mode, "confidence"))
+        steps = doc["jobs"][mode]["steps"]
+        assert any("kgen.py " + mode in s.get("run", "") for s in steps)
+    assert "pull_request" in yaml.safe_load(inst.workflow_text("check", "confidence"))[True]
