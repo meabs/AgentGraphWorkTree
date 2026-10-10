@@ -1,10 +1,10 @@
 # Agent Graph Work Tree
 
-A code graph and short notes for a Java repository, generated into the work tree so a coding agent can ask "who calls this?" or "what does this change touch?" instead of opening dozens of files.
+A code graph and short notes for a Java or Python repository, generated into the work tree so a coding agent can ask "who calls this?" or "what does this change touch?" instead of opening dozens of files.
 
 A script reads the source with tree-sitter (no language model) and writes `.agent-knowledge/`. Every line carries a source file and line number and a tag: `[high]` means it is written in the source (a declaration, annotation, literal path or config entry), `[medium]` means a fixed rule derived it (for example a call target resolved from the declared receiver type). Agents are told to open the cited file before relying on a `[medium]` line, and that the source wins when a generated line is wrong.
 
-Version 0.1.0 · MIT · Windows, macOS and Linux · Java only (Spring, Quarkus, JPA, OpenAPI files, `pom.xml`, SQL, properties, templates).
+Version 0.2.0 · MIT · Windows, macOS and Linux · Java (Spring, Quarkus, JPA, OpenAPI files, `pom.xml`, SQL, properties, templates) and Python.
 
 ## Quick start
 
@@ -15,7 +15,7 @@ cd AgentGraphWorkTree
 .\install.ps1 --repo C:\code\my-java-project        # Windows PowerShell
 ```
 
-Then review and commit `.agent-knowledge/` and the instruction files the installer wrote. Needs git and Python 3.10 or newer. The installer exits without changing anything if the repository has no tracked `.java` files.
+Then review and commit `.agent-knowledge/` and the instruction files the installer wrote. Needs git and Python 3.10 or newer. The installer exits without changing anything if the repository has no tracked `.java` or `.py` files.
 
 As an APM package: `apm install meabs/AgentGraphWorkTree --target claude` places the skill; run its `install.py` to generate the graph (APM copies files and cannot run it for you).
 
@@ -69,6 +69,19 @@ methods:
   method two() -> int  src/main/java/demo/B.java:4
 ```
 
+## Languages
+
+| | Java | Python |
+| --- | --- | --- |
+| Parser | tree-sitter | the standard-library `ast` module (nothing extra to install) |
+| Types and methods | classes, interfaces, enums, records, methods, fields | modules (their functions are methods), classes, methods, decorators |
+| Inheritance and dependencies | `extends`, `implements`, constructor and field types | base classes, `import` statements (module to module), attribute types from annotations or constructor calls |
+| Call links (`[medium]`) | resolved from the declared receiver type | resolved from imports, annotations, `self`, constructor results and return annotations; anything else produces no claim |
+| Frameworks | Spring and Quarkus routes, JPA entities, Spring Data, OpenAPI, `pom.xml`, SQL, properties | Flask and FastAPI routes (`@app.get`, `@app.route(..., methods=[...])`; router and blueprint paths are `[medium]` because the mount prefix is not applied) |
+| Tests | `@Test` classes linked by annotation or name | `test_*.py` modules and `Test*` classes linked by name |
+
+In a mixed repository both extractors run. Pages that would be empty (routes, data model, configuration, build) are not written. TypeScript, Go and others need another extractor that emits the same claim records.
+
 ## Keeping it fresh
 
 The graph is a snapshot. Commands (run with the installed launcher, `~/.local/share/agent-graph/bin/kgen`, or `kgen.cmd` on Windows):
@@ -87,7 +100,8 @@ Measured on Codex and Cursor over two Java projects (spring-petclinic and shopiz
 
 - **Tags matter.** On a repository whose code had drifted from the notes, unlabelled generated notes misled agents in 8 of 24 runs. With any tag or the trust-the-source instruction it was 1 of 108 (pooled afterwards, not pre-planned). Tags and instruction could not be told apart, so the installer ships both.
 - **The graph saves effort on a large repository, not a small one.** On shopizer, Codex used 398k tokens and 115 s with the graph against 953k and 346 s with none, and Cursor opened 4 files instead of 14.5. Accuracy was already at ceiling without it, and there was no saving on spring-petclinic.
-- **Call links are accurate.** Checked against compiled bytecode, `[high]` claims matched 324 of 324 (petclinic) and 13,380 of 13,380 (shopizer); `[medium]` matched 233 of 233 and 8,947 of 8,957.
+- **Call links are accurate (Java).** Checked against compiled bytecode, `[high]` claims matched 324 of 324 (petclinic) and 13,380 of 13,380 (shopizer); `[medium]` matched 233 of 233 and 8,947 of 8,957.
+- **Python call links, checked against a test run.** Click's own tests were run under a call tracer, and 378 of the 433 call edges whose caller ran (87%) were seen at runtime; sampled edges that were not seen were real branches the tests do not reach, or dynamic dispatch. Going the other way, the graph contains 60% of the caller-to-callee pairs the run observed; the misses are mostly callbacks passed as arguments, dunder methods and import-time code. This is a lower bound on precision, not a bytecode-exact check, on one project. No agent token or accuracy experiment has been run on Python.
 - **Notes without the graph cost more.** Generated markdown with no graph used 2.1M tokens on shopizer, the most of any setup.
 - **Alternatives tried.** A model-built graph (Graphiti) cost $1.50 and 29 minutes for petclinic and found 3 of 16 routes. Another tree-sitter tool (CodeGraphContext) had 48.5% correct call links on shopizer; a third (CodeGraph) scored 83% and saved no tokens.
 
@@ -97,9 +111,9 @@ One question ("which HTTP routes does OwnerController handle, and which reposito
 
 ## Limits
 
-- Java only. Other languages need a new extractor that emits the same claim records.
+- Java and Python only. Other languages need a new extractor that emits the same claim records.
 - Two main projects, small samples, two agents. Treat the numbers as signal, not proof.
-- `[medium]` edges are heuristics. Dynamic dispatch, reflection and generated code are not followed.
+- `[medium]` edges are heuristics. Dynamic dispatch, reflection, callbacks and generated code are not followed. Python has no static types to lean on, so unannotated code yields fewer call links than Java.
 - Not tested on Windows with a live agent; the generator, installer and `kg` run on Windows, macOS and Linux in CI.
 - The `low` tier (claims written by a model) exists in the format but the installer never produces it.
 

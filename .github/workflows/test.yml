@@ -38,3 +38,15 @@ jobs:
           python ../.apm/skills/agent-graph/install.py --repo . --home "$RUNNER_TEMP/ag"
           python ../.apm/skills/agent-graph/install.py --repo . --uninstall
           test ! -e .agent-knowledge
+      - name: Python repository smoke test
+        shell: bash
+        run: |
+          mkdir pyproj && cd pyproj && git init -q
+          mkdir -p pkg
+          printf 'class B:\n    def two(self):\n        return 2\n' > pkg/b.py
+          printf 'from .b import B\n\n\ndef one():\n    return B().two()\n' > pkg/a.py
+          touch pkg/__init__.py
+          git add . && git commit -q -m init
+          python ../.apm/skills/agent-graph/install.py --repo . --home "$RUNNER_TEMP/ag2"
+          python .agent-knowledge/kg.py callers two > callers.txt
+          grep -q "pkg.a#one" callers.txt

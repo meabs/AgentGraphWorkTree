@@ -31,10 +31,10 @@ def test_block_only_files_are_deleted_on_removal(tmp_path: Path):
 
 def test_refuses_a_repository_without_java(tmp_path: Path):
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
-    (tmp_path / "a.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / "a.rb").write_text("x = 1\n", encoding="utf-8")
     subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True)
     r = subprocess.run([sys.executable, str(SKILL / "install.py"), "--repo", str(tmp_path), "--home", str(tmp_path / "h")], capture_output=True, text=True)
-    assert r.returncode != 0 and "Java only" in r.stderr + r.stdout and not (tmp_path / ".agent-knowledge").exists() and not (tmp_path / "h").exists()
+    assert r.returncode != 0 and "Java and Python only" in r.stderr + r.stdout and not (tmp_path / ".agent-knowledge").exists() and not (tmp_path / "h").exists()
 
 
 def test_launchers_name_both_shells(tmp_path: Path):

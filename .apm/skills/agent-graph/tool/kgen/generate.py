@@ -10,10 +10,11 @@ from pathlib import Path
 from . import VERSION
 from .claims import HIGH, LOW, MEDIUM, RANK, Claim, dump_claims, sha256_file
 from .java import JavaExtractor
+from .python_lang import PyExtractor
 from . import resources
 
 OUT = ".agent-knowledge"
-SKIP_DIRS = {".git", "target", "build", "node_modules", ".gradle", ".idea", OUT}
+SKIP_DIRS = {".git", "target", "build", "node_modules", ".gradle", ".idea", OUT, "venv", ".venv", "__pycache__", "site-packages", ".tox", "dist", ".mypy_cache", ".pytest_cache", ".eggs"}
 EDGE_PREDICATES = {"declares_type", "extends", "implements", "depends_on", "calls", "instantiates", "handled_by", "renders", "maps_to_table",
                    "relates_to", "manages", "tests", "references", "has_method", "defined_in", "implicitly_depends_on"}
 
@@ -31,7 +32,7 @@ def source_files(repo: Path) -> dict[str, bytes]:
         if set(Path(rel).parts) & SKIP_DIRS:
             continue
         low = rel.lower()
-        if low.endswith((".java", ".properties", ".sql", ".html")) or rel == "pom.xml" or resources.OPENAPI_FILE.search(rel):
+        if low.endswith((".java", ".py", ".properties", ".sql", ".html")) or rel == "pom.xml" or resources.OPENAPI_FILE.search(rel):
             if low.endswith(".properties") and "messages" in low:
                 continue
             f = repo / rel
@@ -43,6 +44,9 @@ def source_files(repo: Path) -> dict[str, bytes]:
 def extract(files: dict[str, bytes]) -> list[Claim]:
     templates = {v for p in files if (v := resources.template_view(p))}
     claims = JavaExtractor({p: d for p, d in files.items() if p.endswith(".java")}, templates).run()
+    py = {p: d for p, d in files.items() if p.endswith(".py")}
+    if py:
+        claims += PyExtractor(py).run()
     for p, d in files.items():
         if p.endswith(".properties"):
             claims += resources.properties(p, d)

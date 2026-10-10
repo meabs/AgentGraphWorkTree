@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the code graph and notes for a Java repository and tell agents to use them (Windows, macOS, Linux).
+"""Generate the code graph and notes for a Java or Python repository and tell agents to use them (Windows, macOS, Linux).
 
   python install.py --repo PATH [--home DIR] [--labels confidence|tags|instruction] [--no-agents-md]
                     [--harness claude,copilot,cursor|none] [--uninstall]
@@ -65,9 +65,8 @@ def write_launchers(home: Path, py: Path) -> None:
     (bindir / "kgen.cmd").write_bytes(f'@echo off\r\n"{py}" "{script}" %*\r\nexit /b %errorlevel%\r\n'.encode())
 
 
-def java_files(repo: Path) -> int:
-    listed = run("git", "-C", str(repo), "ls-files", "*.java", capture_output=True).stdout.split()
-    return len(listed)
+def source_count(repo: Path) -> int:
+    return len(run("git", "-C", str(repo), "ls-files", "*.java", "*.py", capture_output=True).stdout.split())
 
 
 def snippet_of(repo: Path) -> str:
@@ -142,8 +141,8 @@ def main() -> int:
 
     if args.uninstall:
         return uninstall(repo)
-    if not java_files(repo):
-        sys.exit("no tracked .java files: this generator reads Java only (Spring, Quarkus, JPA). Nothing was changed.")
+    if not source_count(repo):
+        sys.exit("no tracked .java or .py files: this generator reads Java and Python only. Nothing was changed.")
 
     home = (args.home or default_home()).resolve()
     home.mkdir(parents=True, exist_ok=True)

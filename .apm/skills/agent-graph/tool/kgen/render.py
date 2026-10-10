@@ -125,9 +125,10 @@ def render_all(claims: list[Claim], graph: dict, manifest: dict, mode: str = "co
 
     packages = sorted({types[t].attrs["package"] for t in types if not is_test(t)})
     main_types = sorted(t for t in types if not is_test(t))
-    pkg_link = {p: f"packages/{p.split('.')[-1]}.md" for p in packages}
+    last = [p.split(".")[-1] for p in packages]
+    pkg_link = {p: f"packages/{p.split('.')[-1] if last.count(p.split('.')[-1]) == 1 else p}.md" for p in packages}
     for p in packages:
-        d = Doc(f"okf/{pkg_link[p]}", "module", f"Package {p}", f"Types, routes and dependencies of the {p} package.", resource=None, tags=["java", "package"])
+        d = Doc(f"okf/{pkg_link[p]}", "module", f"Package {p}", f"Types, routes and dependencies of the {p} package.", resource=None, tags=["package"])
         ts = [t for t in main_types if types[t].attrs["package"] == p]
         d.add(f"# Package `{p}`")
         d.add()
@@ -266,7 +267,7 @@ def render_all(claims: list[Claim], graph: dict, manifest: dict, mode: str = "co
                 d.add(f"- `{c.object}`{' (' + c.attrs['scope'] + ')' if 'scope' in c.attrs else ''} {d.use(c)}")
     out[d.path] = d
 
-    d = Doc("okf/testing.md", "testing", "Tests", "Test classes, the class each one targets, and how the link was derived.", tags=["java", "tests"])
+    d = Doc("okf/testing.md", "testing", "Tests", "Test classes, the class each one targets, and how the link was derived.", tags=["tests"])
     d.add("# Tests")
     d.add()
     d.add("| Test class | Tests | Target | Link | Source |")
@@ -304,7 +305,17 @@ def render_all(claims: list[Claim], graph: dict, manifest: dict, mode: str = "co
                 d.add(f"- `{c.subject.split(':', 1)[1]}` depends on `{c.object.split(':', 1)[1]}`: {c.basis} {d.use(c)}")
         out[d.path] = d
 
-    d = Doc("okf/index.md", "index", "Repository knowledge" if MODE not in ("confidence", "provenance") else "Generated repository knowledge", "Entry point to documentation of this Java/Spring repository.", tags=["index"])
+    has = {
+        "okf/routes.md": bool(by_pred["handled_by"]),
+        "okf/data-model.md": any(by_pred[k] for k in ("has_field", "maps_to_table", "has_column", "relates_to", "manages", "references", "has_query")),
+        "okf/configuration.md": bool(by_pred["has_value"]),
+        "okf/build.md": any(c.file == "pom.xml" for c in claims),
+    }
+    for rel, present in has.items():  # a page with nothing on it only costs an agent a read
+        if not present:
+            out.pop(rel, None)
+
+    d = Doc("okf/index.md", "index", "Repository knowledge" if MODE not in ("confidence", "provenance") else "Generated repository knowledge", "Entry point to documentation of this repository.", tags=["index"])
     d.add("# Repository knowledge" if MODE not in ("confidence", "provenance") else "# Generated repository knowledge")
     d.add()
     if MODE == "confidence":
@@ -325,7 +336,8 @@ def render_all(claims: list[Claim], graph: dict, manifest: dict, mode: str = "co
     for p in packages:
         d.add(f"- [{p}]({pkg_link[p]})")
     for name, rel in (("HTTP routes", "routes.md"), ("Data model", "data-model.md"), ("Configuration", "configuration.md"), ("Build", "build.md"), ("Tests", "testing.md")) + ((("Inferred relationships", "inferred.md"),) if by_pred["purpose"] or by_pred["implicitly_depends_on"] else ()):
-        d.add(f"- [{name}]({rel})")
+        if f"okf/{rel}" in out:
+            d.add(f"- [{name}]({rel})")
     out[d.path] = d
 
     sk = Doc("skills/use-generated-knowledge/SKILL.md", "skill", "use-generated-knowledge", "")
