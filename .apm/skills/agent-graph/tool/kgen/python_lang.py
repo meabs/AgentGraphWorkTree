@@ -361,7 +361,8 @@ class PyExtractor:
         self.add(t, "is_a", "module", HIGH, "declaration", m, 1, stereotypes=[], annotations=[], modifiers=[], role="test" if m.is_test else None, simple=m.name.rsplit(".", 1)[-1], package=m.pkg, end_line=len(self.lines[m.path]) or 1)
         self.add(f"package:{m.pkg}", "declares_type", t, HIGH, "declaration", m, 1)
         for dep in sorted(m.imported - {m.name}):
-            self.add(t, "depends_on", self.tid(dep), HIGH, "import statement", m, self.import_line(m, dep), via="import")
+            syms = sorted({v[2] for v in m.names.values() if v[0] == "from" and v[1] == dep})
+            self.add(t, "depends_on", self.tid(dep), HIGH, "import statement", m, self.import_line(m, dep), via="import", symbols=syms)
         for (mod, fname), f in sorted(self.funcs.items()):
             if mod == m.name:
                 self.method_claim(m, t, fname, f)

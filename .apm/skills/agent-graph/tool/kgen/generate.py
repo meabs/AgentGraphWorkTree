@@ -101,7 +101,7 @@ def build_graph(claims: list[Claim]) -> dict:
         elif c.predicate in EDGE_PREDICATES and ":" in c.object and c.object.split(":", 1)[0] in ("type", "method", "table", "template", "route", "package", "external"):
             node(c.object)
             edges.append({"from": c.subject, "to": c.object, "predicate": c.predicate, "confidence": c.confidence, "basis": c.basis, "source": src,
-                          **({"via": c.attrs["via"]} if "via" in c.attrs else {}), **({"relation": c.attrs["relation"]} if "relation" in c.attrs else {})})
+                          **({"via": c.attrs["via"]} if "via" in c.attrs else {}), **({"relation": c.attrs["relation"]} if "relation" in c.attrs else {}), **({"symbols": c.attrs["symbols"]} if c.attrs.get("symbols") else {})})
             if c.predicate == "handled_by":
                 n.update(http=c.attrs["http"], path=c.attrs["path"], file=c.file, line=c.line)
             if c.predicate == "defined_in" and c.subject.startswith("template:"):

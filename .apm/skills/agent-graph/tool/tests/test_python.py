@@ -89,3 +89,11 @@ def test_sync_is_idempotent_for_python(tmp_path: Path):
     repo = build(tmp_path)
     again = gen.generate(repo)
     assert again["written"] == [] and again["removed"] == []
+
+
+def test_import_edges_name_the_imported_symbols(tmp_path: Path):
+    repo = build(tmp_path)
+    imp = next(x for x in claims(repo) if x["predicate"] == "depends_on" and x["subject"] == "type:app.service" and x["object"] == "type:app.models")
+    assert imp["attrs"]["symbols"] == ["User"]
+    graph = json.loads((repo / gen.OUT / "graph.json").read_text(encoding="utf-8"))
+    assert any(e["from"] == "type:app.service" and e["to"] == "type:app.models" and e.get("symbols") == ["User"] for e in graph["edges"])

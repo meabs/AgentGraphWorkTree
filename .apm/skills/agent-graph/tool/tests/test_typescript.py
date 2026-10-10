@@ -128,3 +128,9 @@ def test_commonjs_objects_and_prototype_methods(tmp_path: Path):
     assert ("method:lib.Old#run", "method:lib.Old#stop", "medium") in calls      # Foo.prototype.x = function
     kinds = {x["subject"]: x["object"] for x in claims(repo) if x["predicate"] == "is_a"}
     assert kinds["type:lib.app.app"] == "object" and kinds["type:lib.Old"] == "class"
+
+
+def test_import_edges_name_the_imported_symbols(tmp_path: Path):
+    repo = build(tmp_path)
+    imp = next(x for x in claims(repo) if x["predicate"] == "depends_on" and x["subject"] == "type:src.services.service" and x["object"] == "type:src.services.repo")
+    assert imp["attrs"]["symbols"] == ["MemRepo", "UserRepo"]

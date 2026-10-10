@@ -67,7 +67,8 @@ def keep(e, args):
 def fmt_edge(e, side):
     other = e["to"] if side == "to" else e["from"]
     extra = f" ({e['basis']})" if SHOW and e.get("basis") and e["confidence"] != "high" else ""
-    return f"  {tg(e['confidence'])}{e['predicate']} {other}  {loc(e)}{extra}"
+    syms = f" [imports {', '.join(e['symbols'])}]" if e.get("symbols") else ""
+    return f"  {tg(e['confidence'])}{e['predicate']} {other}{syms}  {loc(e)}{extra}"
 
 
 def cmd_show(args):
