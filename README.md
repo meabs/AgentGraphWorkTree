@@ -1,63 +1,82 @@
 # Agent Graph Work Tree
 
-A code graph and short notes for a Java, Python, TypeScript or JavaScript (React, Node, Next.js) repository, generated into the work tree so a coding agent can ask "who calls this?" or "what does this change touch?" instead of opening dozens of files.
+[![CI](https://github.com/meabs/AgentGraphWorkTree/actions/workflows/test.yml/badge.svg)](https://github.com/meabs/AgentGraphWorkTree/actions/workflows/test.yml)
+![version](https://img.shields.io/badge/version-0.3.4-blue)
+![license](https://img.shields.io/badge/license-MIT-green)
+![platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 
-A script reads the source with tree-sitter (no language model) and writes `.agent-knowledge/`. Every line carries a source file and line number and a tag: `[high]` means it is written in the source (a declaration, annotation, literal path or config entry), `[medium]` means a fixed rule derived it (for example a call target resolved from the declared receiver type). Agents are told to open the cited file before relying on a `[medium]` line, and that the source wins when a generated line is wrong.
+A code graph for your repository, generated into the work tree, so a coding agent can ask *"who calls this?"*, *"what extends this?"* or *"what does this change touch?"* and get a precise answer in one command instead of opening dozens of files.
 
-Version 0.3.4 · MIT · Windows, macOS and Linux · Java (Spring, Quarkus, JPA, OpenAPI files, `pom.xml`, SQL, properties, templates), Python, and TypeScript/JavaScript (React, Express, NestJS, Next.js, `package.json`).
+A script parses the source (no language model involved) and writes `.agent-knowledge/`. Every fact cites a file and line and carries a confidence tag, so an agent knows what to trust and what to check. The installer wires the graph into the instruction files that Claude Code, Codex, Cursor and GitHub Copilot already read.
+
+| Language | Frameworks and files understood |
+| --- | --- |
+| **Java** | Spring, Quarkus, JPA, Spring Data, OpenAPI, `pom.xml`, SQL, properties, templates |
+| **Python** | Flask and FastAPI routes, dataclasses, test modules |
+| **TypeScript / JavaScript** | React, Express, NestJS, Next.js, React Router, `package.json` |
+
+## Contents
+
+- [Quick start](#quick-start)
+- [Using the graph](#using-the-graph)
+- [How it works](#how-it-works)
+- [Confidence tags](#confidence-tags)
+- [Language support](#language-support)
+- [Keeping it fresh](#keeping-it-fresh)
+- [Evidence](#evidence)
+- [Limitations](#limitations)
+- [Development](#development)
 
 ## Quick start
+
+Requires git and Python 3.10 or newer.
 
 ```sh
 git clone https://github.com/meabs/AgentGraphWorkTree
 cd AgentGraphWorkTree
-./install.sh --repo ~/code/my-java-project          # macOS / Linux / Git Bash
-.\install.ps1 --repo C:\code\my-java-project        # Windows PowerShell
+
+./install.sh --repo ~/code/my-project          # macOS, Linux, Git Bash
+.\install.ps1 --repo C:\code\my-project        # Windows PowerShell
 ```
 
-Then review and commit `.agent-knowledge/` and the instruction files the installer wrote. Needs git and Python 3.10 or newer. The installer exits without changing anything if the repository has no tracked Java, Python, TypeScript or JavaScript files.
+Review and commit `.agent-knowledge/` and the instruction files the installer wrote. The installer exits without changing anything if the repository has no tracked Java, Python, TypeScript or JavaScript files. To remove everything it added, run it again with `--uninstall`.
 
-As an APM package: `apm install meabs/AgentGraphWorkTree --target claude` places the skill; run its `install.py` to generate the graph (APM copies files and cannot run it for you).
+Installing as an APM package is also supported: `apm install meabs/AgentGraphWorkTree --target claude` places the skill, and its `install.py` generates the graph.
 
-## What the installer does
+### What the installer does
 
-| Step | What happens |
+1. Copies the generator to `~/.local/share/agent-graph` (`%LOCALAPPDATA%\agent-graph` on Windows; override with `--home` or `AGENT_GRAPH_HOME`).
+2. Creates a private virtual environment there and installs `tree-sitter` with the Java and TypeScript grammars. Nothing is added to your global Python.
+3. Runs `kgen sync` on the repository to write `.agent-knowledge/`.
+4. Adds a marked block (`<!-- agent-graph:begin -->` … `<!-- agent-graph:end -->`) to `AGENTS.md`, to `CLAUDE.md` as an `@AGENTS.md` import, to `.github/copilot-instructions.md` and to `.cursor/rules/generated-knowledge.mdc`. Re-running refreshes the block and never touches text outside it.
+
+| Option | Effect |
 | --- | --- |
-| 1. Copy | Copies the generator to `~/.local/share/agent-graph` (`%LOCALAPPDATA%\agent-graph` on Windows; override with `--home` or `AGENT_GRAPH_HOME`). |
-| 2. Environment | Creates a private virtual environment there and installs `tree-sitter` and the Java and TypeScript grammars. Nothing goes into your global Python. |
-| 3. Generate | Runs `kgen sync` on the repository and writes `.agent-knowledge/`. |
-| 4. Instructions | Adds a marked block (`<!-- agent-graph:begin -->` ... `end`) to `AGENTS.md` (Codex and others), `CLAUDE.md` as an `@AGENTS.md` import (Claude Code), `.github/copilot-instructions.md` (Copilot) and `.cursor/rules/generated-knowledge.mdc` (Cursor). Re-running refreshes the block and never touches text outside it. `--no-agents-md` skips this step; `--harness` picks which extra files. |
+| `--repo PATH` | Repository to process (default: current directory). |
+| `--home DIR` | Where to install the generator. |
+| `--harness LIST` | Which extra instruction files to write: any of `claude`, `copilot`, `cursor`, or `none`. |
+| `--no-agents-md` | Do not write any instruction files. |
+| `--labels MODE` | `confidence` (default), `tags` or `instruction`; see [Confidence tags](#confidence-tags). |
+| `--uninstall` | Remove the block and `.agent-knowledge/`. |
 
-`--labels confidence` (default) tags every fact and tells the agent that the source wins. `tags` and `instruction` use only one of the two. The default is the variant the experiments tested.
+## Using the graph
 
-## What gets generated
-
-```
-.agent-knowledge/
-  claims.jsonl       one claim per line: subject, predicate, object, tier, file, line, evidence
-  graph.json         nodes and edges built from the claims
-  manifest.json      generator version, source commit, hash of every source file used
-  bin/kg, kg.cmd     query command (Python standard library only)
-  okf/               short markdown notes: index, routes, data model, configuration, build, testing, one page per package
-  skills/            a skill that tells agents how to use the graph
-  AGENTS.snippet.md  the paragraph the installer put into AGENTS.md
-```
-
-Query it:
+Agents call `kg`, a small command that needs only the Python standard library. On Windows use `kg.cmd`.
 
 ```sh
-.agent-knowledge/bin/kg show <Type>         # what it is, with sources
-.agent-knowledge/bin/kg impact <Type>       # what depends on it, for scoping a change
-.agent-knowledge/bin/kg callers <method>
-.agent-knowledge/bin/kg routes
-.agent-knowledge/bin/kg tests <Type>
-.agent-knowledge/bin/kg path <from> <to>
-.agent-knowledge/bin/kg --min high impact <Type>   # hide [medium] edges
+.agent-knowledge/bin/kg show <Type>                    # what a type is, with sources
+.agent-knowledge/bin/kg callers <method>               # who calls a method
+.agent-knowledge/bin/kg dependents <Type>              # who uses, extends or implements it
+.agent-knowledge/bin/kg subclasses <Type>              # every subclass at any depth
+.agent-knowledge/bin/kg subclasses <Type> --overrides <method>
+.agent-knowledge/bin/kg impact <Type>                  # transitive users, routes and tests
+.agent-knowledge/bin/kg routes                         # HTTP routes and their handlers
+.agent-knowledge/bin/kg tests <Type>                   # tests linked to a type
+.agent-knowledge/bin/kg path <from> <to>               # shortest dependency path
+.agent-knowledge/bin/kg --min high impact <Type>       # hide [medium] edges
 ```
 
-Also `find`, `deps`, `dependents`, `entity`, `stats`. On Windows use `kg.cmd`.
-
-Sample output, from a two-class demo:
+Also `find`, `deps`, `entity`, `stats` and `stale`. Import edges list the imported symbols (`[imports AppConfig]`), so a module that shares its name with a type is not ambiguous.
 
 ```
 $ .agent-knowledge/bin/kg show demo.B
@@ -69,77 +88,100 @@ methods:
   method two() -> int  src/main/java/demo/B.java:4
 ```
 
-## Languages
+## How it works
+
+```
+source files ──► extractors ──► claims ──► graph.json ──► notes and kg
+                (tree-sitter,    one fact     nodes and      okf/*.md
+                 Python ast)     per line     edges
+```
+
+Each extractor emits **claims**: a subject, predicate and object, with a confidence tier, the file and line, and the text of that line. Claims are the single source of truth; the graph and notes are pure functions of them.
+
+```
+.agent-knowledge/
+  claims.jsonl       one claim per line, with tier, file, line and evidence
+  graph.json         nodes and edges built from the claims
+  manifest.json      generator version, source commit, hash of every source file used
+  bin/kg, kg.cmd     the query command
+  okf/               short markdown notes: index, routes, data model, configuration, build, testing, one page per package
+  skills/            a skill that tells agents how to use the graph
+  AGENTS.snippet.md  the paragraph the installer put into AGENTS.md
+```
+
+Pages that would be empty (routes, data model, configuration, build) are not written. In a mixed repository every extractor runs.
+
+## Confidence tags
+
+| Tag | Meaning | Examples |
+| --- | --- | --- |
+| `[high]` | Written in the source. | A declaration, an annotation, an import, a literal path, a config entry. |
+| `[medium]` | Derived by a fixed rule. | A call target resolved from the declared receiver type, a test linked by name. |
+| `[low]` | Written by a model. | Part of the format, but the installer never produces it. |
+
+Agents are told to open the cited file before relying on a `[medium]` line, and that the source wins whenever a generated line is wrong. The `confidence` label mode ships both the tags and that instruction; `tags` and `instruction` use only one of the two.
+
+## Language support
 
 | | Java | Python | TypeScript / JavaScript |
 | --- | --- | --- | --- |
-| Parser | tree-sitter | the standard-library `ast` module | tree-sitter (`.ts .tsx .js .jsx .mjs .cjs .mts .cts`; `.d.ts`, minified and files over 500 KB are skipped) |
-| Types and methods | classes, interfaces, enums, records, methods, fields | modules (their functions are methods), classes, methods, decorators | modules (functions and hooks are methods), classes, interfaces, enums, React function components (a `component` type with a `render` method), `Foo.prototype.x = ...` and `obj.x = function` objects |
-| Inheritance and dependencies | `extends`, `implements`, constructor and field types | base classes, `import` statements, attribute types from annotations or constructor calls | `extends`, `implements`, `import` / `require` / `export ... from` (relative paths, `export *` barrels, `tsconfig` `paths` and `baseUrl`), property and constructor-parameter types |
-| Call links (`[medium]`) | resolved from the declared receiver type | resolved from imports, annotations, `self`, constructor results and return annotations | resolved from imports, type annotations, `this`, `new` and return types; JSX elements become `renders` edges |
-| Frameworks | Spring and Quarkus routes, JPA entities, Spring Data, OpenAPI, `pom.xml`, SQL, properties | Flask and FastAPI routes (router and blueprint paths are `[medium]`) | Express/Fastify-style `app.get('/x', handler)` (inline handlers become `METHOD /path` methods), NestJS `@Controller`/`@Get`, Next.js app and pages router files, React Router `<Route>`, `package.json` scripts and dependencies |
-| Tests | `@Test` classes linked by annotation or name | `test_*.py` modules and `Test*` classes linked by name | `*.test.*`, `*.spec.*` and `__tests__/` files linked by name, counting `it(...)` and `test(...)` |
+| **Parser** | tree-sitter | standard-library `ast` | tree-sitter (`.ts .tsx .js .jsx .mjs .cjs .mts .cts`; `.d.ts`, minified files and files over 500 KB are skipped) |
+| **Declarations** | classes, interfaces, enums, records, methods, fields | modules, classes, functions, methods, decorators | modules, classes, interfaces, enums, functions and hooks, React components, prototype and object-literal methods, class expressions in static fields |
+| **Dependencies** | `extends`, `implements`, constructor and field types | base classes, `import` statements, attribute types | `extends`, `implements`, `import`, `require`, `export … from`, `export *` barrels, `tsconfig` `paths` and `baseUrl` |
+| **Call links** (`[medium]`) | resolved from the declared receiver type | resolved from imports, annotations, `self`, constructor results and return annotations | resolved from imports, annotations, `this`, `new` and return types; JSX elements become `renders` edges |
+| **Routes** | Spring, Quarkus | Flask, FastAPI | Express and Fastify style, NestJS controllers, Next.js app and pages routers, React Router |
+| **Tests** | `@Test` classes | `test_*.py` modules, `Test*` classes | `*.test.*`, `*.spec.*`, `__tests__/` |
 
-In a mixed repository every extractor runs. Pages that would be empty (routes, data model, configuration, build) are not written. Other languages need another extractor that emits the same claim records.
+Other languages need an extractor that emits the same claim records.
 
 ## Keeping it fresh
 
-The graph is a snapshot. Commands (run with the installed launcher, `~/.local/share/agent-graph/bin/kgen`, or `kgen.cmd` on Windows):
+The graph is a snapshot of one commit. Use the installed launcher (`~/.local/share/agent-graph/bin/kgen`, or `kgen.cmd` on Windows):
 
 ```sh
-kgen sync   --repo .     # regenerate
-kgen check  --repo .     # exit 1 and list stale or new files if sources changed since the last sync
-kgen verify --repo .     # confirm each claim still matches its cited line
+kgen sync   --repo .    # regenerate
+kgen check  --repo .    # exit 1 and list stale or new files if sources changed since the last sync
+kgen verify --repo .    # confirm each claim still matches its cited line
 ```
 
-`check` is cheap enough for CI: install the dependencies, fetch this repository, and run `python AgentGraphWorkTree/.apm/skills/agent-graph/tool/kgen.py check --repo .` (this CI step has not been exercised; the commands themselves are tested). Regenerating on every merge is what the experiments assumed.
+`kgen check` is suited to CI; regenerating on every merge is what the experiments assumed. The CI step itself has not been exercised, though the commands are tested. `kg stale` shows agents which files changed since the graph was built.
 
-## What the experiments found
+## Evidence
 
-Measured on Codex and Cursor over two Java projects (spring-petclinic and shopizer). Full write-up and raw results: https://github.com/meabs/repo-knowledge-gen.
+The full method, data and caveats are in [docs/EVALUATION.md](docs/EVALUATION.md). In brief:
 
-- **Tags matter.** On a repository whose code had drifted from the notes, unlabelled generated notes misled agents in 8 of 24 runs. With any tag or the trust-the-source instruction it was 1 of 108 (pooled afterwards, not pre-planned). Tags and instruction could not be told apart, so the installer ships both.
-- **The graph saves effort on a large repository, not a small one.** On shopizer, Codex used 398k tokens and 115 s with the graph against 953k and 346 s with none, and Cursor opened 4 files instead of 14.5. Accuracy was already at ceiling without it, and there was no saving on spring-petclinic.
-- **Call links are accurate (Java).** Checked against compiled bytecode, `[high]` claims matched 324 of 324 (petclinic) and 13,380 of 13,380 (shopizer); `[medium]` matched 233 of 233 and 8,947 of 8,957.
-- **Python call links, checked against a test run.** Click's own tests were run under a call tracer, and 378 of the 433 call edges whose caller ran (87%) were seen at runtime; sampled edges that were not seen were real branches the tests do not reach, or dynamic dispatch. Going the other way, the graph contains 60% of the caller-to-callee pairs the run observed; the misses are mostly callbacks passed as arguments, dunder methods and import-time code. This is a lower bound on precision, not a bytecode-exact check, on one project. No agent token or accuracy experiment has been run on Python.
-- **TypeScript/JavaScript call links, audited by hand.** 32 randomly chosen call, instantiation and JSX edges from Express, zustand, Next-js-Boilerplate and the NestJS starter were checked against the source; all 32 were correct. Recall was not measured; it is lower for untyped JavaScript, where a method called on a value of unknown type (for example `this.router.handle(...)` in Express) produces no claim. No agent token or accuracy experiment has been run on TypeScript either.
-- **Notes without the graph cost more.** Generated markdown with no graph used 2.1M tokens on shopizer, the most of any setup.
-- **Alternatives tried.** A model-built graph (Graphiti) cost $1.50 and 29 minutes for petclinic and found 3 of 16 routes. Another tree-sitter tool (CodeGraphContext) had 48.5% correct call links on shopizer; a third (CodeGraph) scored 83% and saved no tokens.
+- **Accuracy.** Java call links checked against compiled bytecode: `[high]` 13,380 of 13,380 and `[medium]` 8,947 of 8,957 on shopizer. Python: 87% of call edges whose caller ran were seen at runtime in Click's test suite. TypeScript and JavaScript: 32 of 32 sampled edges correct by hand.
+- **Labels prevent misleading notes.** Unlabelled generated notes misled agents in 8 of 24 runs on a drifted repository; with a tag or the trust-the-source instruction it was 1 of 108.
+- **Token savings are real for Java and not shown elsewhere.** On a large Java repository (shopizer) Codex used 398k tokens with the graph against 953k without. On Python and TypeScript repositories, with 192 runs across Claude Code and Codex, the graph kept answers correct and was used reliably, but did not reduce tokens overall. A hierarchy command (`kg subclasses`) reduced Codex's tokens by 16% on hierarchy questions and did not help Claude Code.
+- **All four agents pick it up.** Claude Code, Codex, Cursor and the Copilot CLI each found and used `kg` from the generated instructions.
 
-## Checked with live agents
+## Limitations
 
-One question ("which HTTP routes does OwnerController handle, and which repository methods does it call?") on a fresh clone of spring-petclinic with the installer's output, asked once to each agent in non-interactive mode (claude 2.1.296 (Claude Code); cursor-agent 2026.10.01-14929f9; codex codex-cli 0.157.0; copilot GitHub Copilot CLI 1.0.95.). All four found and used `.agent-knowledge/bin/kg` without being told where it was, and all four gave the same correct answer: 7 routes and 3 `OwnerRepository` methods (`findById`, `save`, `findByLastNameStartingWith`). Each also opened the source file or checked the cited lines. This shows the instruction files are picked up by Claude Code (through `CLAUDE.md`), Codex (`AGENTS.md`), Cursor (the rule file) and the Copilot CLI (`.github/copilot-instructions.md`). It is one run each and says nothing about token savings; those figures come from the experiments above. VS Code Copilot agent mode was not tried.
+- Java, Python, TypeScript and JavaScript only. Vue, Svelte and Angular templates are not read, and `pyproject.toml` is not parsed.
+- `[medium]` edges are heuristics. Dynamic dispatch, reflection, callbacks and generated code are not followed, and unannotated Python and plain JavaScript yield fewer call links than Java or TypeScript.
+- The experiments are small: two to four runs per cell, two agents with the controlled comparisons. Treat the numbers as signal, not proof.
+- VS Code Copilot agent mode was not tested. Windows is covered in CI but was not tried with a live agent.
 
-Python and TypeScript were checked the same way, once per agent: Click ("which classes inherit from `Parameter`, and which methods does changing `Parameter.__init__` affect?") and Next-js-Boilerplate ("which components render `BaseTemplate`, and which functions call `getI18nPath`?"). On Click, Claude Code, Cursor and Codex gave the correct answer (`Option` and `Argument`, whose `__init__` methods call `Parameter.__init__`); Claude Code and Copilot ran the graph command only once or not at all and mostly used `grep`, so that run shows the answer was right, not that the graph was needed. On Next-js-Boilerplate, Claude Code, Cursor and Codex used `kg` and correctly named the two layouts that render `BaseTemplate` and the four callers of `getI18nPath`. Copilot opened `kg --help`, then answered from `grep` alone (also correctly) and said so. Codex needs `< /dev/null` in non-interactive runs, otherwise it waits for stdin.
-
-Since 0.3.1 the instruction block lists the exact `kg` command for each kind of structural question (callers, impact, dependents, routes, tests). A controlled run on Click and Next-js-Boilerplate followed: six questions (for example "which functions call `getI18nPath`?"), each asked twice to Claude Code and to Codex, on a clean clone and on a clone with the installer's output (48 runs). With the block, both agents ran `kg` in 24 of 24 runs; without it, in none. All 48 answers were correct. Tokens did not drop on these small repos: Claude Code used 8% fewer (70k against 76k per question), Codex 16% more (74k against 63k). The questions are ones `grep` answers in a call or two, so this shows the graph is used and not wrong, not that it saves tokens; the savings reported above came from a large Java repository. One miss in the graph surfaced: for a file whose module and exported type share a name (`AppConfig`), `kg dependents` returned every importer of the module and the agents had to check with `grep` which files import the symbol itself. Since 0.3.3 each import edge lists the imported symbols (`[imports AppConfig]`), so this no longer needs a second step. Cursor and Copilot were not re-run with the new block.
-
-A second run used larger repositories, Celery (443 Python files) and NestJS (2,012 TypeScript files), with six structural questions ("which classes inherit from `Backend`, directly or through other classes?", "which functions call `stripEndSlash`?"), 48 runs, answer keys built with `ast` and `grep` and not from the graph. Both agents ran `kg` in every graph run and were fully correct in both arms. Tokens did not fall: with the graph Claude Code used 9% more (91k against 83k per question) and Codex 16% more (98k against 84k), because the agents ran `kg` and then checked the result with `grep` as the instructions tell them to. The graph was cheaper on one question (callers of a function, 71k against 100k) and dearer on the one that listed 22 subclasses (126k against 95k). So the token savings reported for Java are not shown for Python or TypeScript; what the graph offers there today is a single consistent way to ask, not lower cost. The graph also missed one caller in NestJS (`builder.ts`): the call sat inside a class expression assigned to a static field (`static ConfigProxy = class implements ... {}`), which the extractor did not collect. The agents found it by checking with `grep`. Since 0.3.3 those classes are collected (as `Outer.field`) and `kg callers stripEndSlash` returns all five callers.
-
-Two follow-up changes were tried on the same two repositories and did not help. Six questions that need more than one hop (all subclasses of a class at any depth, which of them override a method, callers of callers; 72 runs with three arms: no graph, the 0.3.3 instructions, and instructions that also said to trust `kg` and not repeat it with `grep`) were all answered correctly by every arm. Tokens per question were: Claude Code 81k with no graph, 84k with the 0.3.3 instructions, 102k with the "trust `kg`" wording; Codex 107k, 136k and 138k. Codex ran fewer `grep` commands with the graph (3.2 against 1.9 and 1.7), but the extra `kg` calls cost more than they saved, and the "trust `kg`" wording was not better than the original, so it was not kept. The probable reason is that `kg dependents` returns one level: listing every subclass of a class takes one call per level, which `grep` does about as cheaply. A `kg subclasses <type>` command that returns the whole hierarchy in one call is the obvious next test. With four runs per cell and large run-to-run spread, differences under about 20% should be read as noise.
-
-Since 0.3.4 `kg subclasses <type> [--overrides method]` lists every subclass or implementer at any depth in one call (test classes hidden unless `--include-tests`), and the instruction block names it. The same six questions were run again with it (24 runs, two repetitions per agent and question; the no-graph and 0.3.3 numbers are from the run above). On the five hierarchy questions Codex used 90k tokens per question against 106k with no graph and 135k with the 0.3.3 instructions, a 16% saving over no graph; Claude Code used 82k against 79k with no graph and 75k with 0.3.3, so no saving. Per question the NestJS ones were cheaper with the graph (84k against 114k for "all subclasses of `BaseExceptionFilterContext`", 80k against 94k for `ClientProxy`), the Celery ones were level, and the one question that is not about hierarchy (callers of callers) cost more with the graph (164k against 101k). All 24 answers were correct. Claude Code skipped `kg` in 3 of 12 runs and Codex in 1 of 12. Taken together: a hierarchy command helps Codex and helps on NestJS, it does not help Claude Code, and with two repetitions per cell none of these differences is firm.
-
-## Limits
-
-- Java, Python, TypeScript and JavaScript only. Other languages need a new extractor that emits the same claim records.
-- Two main projects, small samples, two agents. Treat the numbers as signal, not proof.
-- `[medium]` edges are heuristics. Dynamic dispatch, reflection, callbacks and generated code are not followed. Python and plain JavaScript have no static types to lean on, so unannotated code yields fewer call links than Java or TypeScript. Vue, Svelte and Angular templates are not read.
-- Not tested on Windows with a live agent; the generator, installer and `kg` run on Windows, macOS and Linux in CI.
-- The `low` tier (claims written by a model) exists in the format but the installer never produces it.
-
-## Layout
+## Development
 
 ```
 apm.yml                                APM package manifest
-install.sh / install.ps1               entry points
+install.sh, install.ps1                entry points
 .apm/skills/agent-graph/SKILL.md       agent instructions
 .apm/skills/agent-graph/install.py     cross-platform installer
-.apm/skills/agent-graph/tool/          kgen (generator) and its tests
+.apm/skills/agent-graph/tool/kgen/     generator: extractors, graph builder, renderer, kg
+.apm/skills/agent-graph/tool/tests/    tests
 ```
 
-Tests: `pip install pytest tree-sitter tree-sitter-java tree-sitter-typescript && cd .apm/skills/agent-graph/tool && python -m pytest -q`.
+```sh
+pip install pytest tree-sitter tree-sitter-java tree-sitter-typescript
+cd .apm/skills/agent-graph/tool && python -m pytest -q
+```
+
+CI runs the tests and installer smoke tests for all three languages on Linux, macOS and Windows.
+
+The experiments that motivated the design live in [meabs/repo-knowledge-gen](https://github.com/meabs/repo-knowledge-gen).
 
 ## License
 
-MIT. See `LICENSE`.
+[MIT](LICENSE)
