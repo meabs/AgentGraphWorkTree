@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Graph Work Tree</title>
+<meta name="description" content="A deterministic code graph for Java, Python and TypeScript repositories, generated into the work tree so coding agents can ask who calls what, what extends what and what a change touches.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='8' cy='16' r='4' fill='%232f5fd0'/%3E%3Ccircle cx='24' cy='8' r='4' fill='%231f7a5a'/%3E%3Ccircle cx='24' cy='24' r='4' fill='%231f7a5a'/%3E%3Cpath d='M12 15L20 9M12 17L20 23' stroke='%23888' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#fbfaf7;--fg:#1d2330;--mut:#5d6578;--line:#dcdfe6;--card:#ffffff;--acc:#2f5fd0;--accbg:#e8eefc;--hi:#1f7a5a;--hibg:#e3f4ec;--med:#9a6412;--medbg:#fbf0dc;--term:#171b26;--termfg:#e6e9f2;--termmut:#8f98ad;--termhi:#59d3a6;--termmed:#f0b75a}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12151c;--fg:#e8eaf0;--mut:#9aa2b5;--line:#2c3242;--card:#1a1e29;--acc:#7aa2ff;--accbg:#1f2a47;--hi:#4cc29a;--hibg:#16302a;--med:#e2a93b;--medbg:#34290f;--term:#0d1017;--termfg:#e6e9f2;--termmut:#8f98ad;--termhi:#59d3a6;--termmed:#f0b75a;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#12151c;--fg:#e8eaf0;--mut:#9aa2b5;--line:#2c3242;--card:#1a1e29;--acc:#7aa2ff;--accbg:#1f2a47;--hi:#4cc29a;--hibg:#16302a;--med:#e2a93b;--medbg:#34290f;--term:#0d1017;--termfg:#e6e9f2;--termmut:#8f98ad;--termhi:#59d3a6;--termmed:#f0b75a;color-scheme:dark}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--acc)}
+code,pre,.mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+code{font-size:.88em;background:var(--accbg);padding:.1em .38em;border-radius:5px}
+.wrap{max-width:1040px;margin:0 auto;padding-inline:20px}
+header.top{border-bottom:1px solid var(--line);position:sticky;top:0;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);z-index:5}
+header.top .wrap{display:flex;align-items:center;gap:20px;min-height:56px;flex-wrap:wrap}
+.brand{font-weight:700;letter-spacing:-.01em;color:var(--fg);text-decoration:none;display:flex;align-items:center;gap:9px}
+nav{display:flex;gap:18px;margin-left:auto;flex-wrap:wrap;font-size:14px}
+nav a{color:var(--mut);text-decoration:none}nav a:hover{color:var(--fg)}
+.gh{font-weight:600;color:var(--fg)}
+.hero{padding-block:72px 40px}
+.kicker{font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--acc)}
+h1{font-size:clamp(34px,5.4vw,56px);line-height:1.08;letter-spacing:-.025em;margin:.35em 0 .4em;max-width:18ch;text-wrap:balance}
+.sub{font-size:19px;color:var(--mut);max-width:62ch;margin:0 0 26px}
+.cta{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.btn{display:inline-block;padding:11px 18px;border-radius:9px;font-weight:600;text-decoration:none;border:1px solid var(--line);color:var(--fg);background:var(--card)}
+.btn.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+:root[data-theme="dark"] .btn.primary{color:#0b1020}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .btn.primary{color:#0b1020}}
+.install{margin-top:26px;display:flex;align-items:stretch;max-width:640px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--term)}
+.install code{flex:1;background:none;color:var(--termfg);padding:13px 16px;font-size:13.5px;overflow-x:auto;white-space:nowrap}
+.install button{border:0;border-left:1px solid #2a3042;background:#1b2030;color:var(--termfg);padding:0 16px;font:600 13px Inter,sans-serif;cursor:pointer}
+.install button:hover{background:#242b3f}
+section.block{padding-block:56px;border-top:1px solid var(--line)}
+h2{font-size:clamp(26px,3.4vw,34px);letter-spacing:-.02em;margin:0 0 10px;text-wrap:balance}
+.lede{color:var(--mut);max-width:68ch;margin:0 0 24px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px}
+.card h3{margin:0 0 6px;font-size:17px}
+.card p{margin:0;color:var(--mut);font-size:15px}
+figure{margin:0 0 20px;overflow-x:auto}
+figure img{display:block;width:100%;min-width:620px;height:auto;border-radius:10px;border:1px solid var(--line)}
+figcaption{font-size:13px;color:var(--mut);margin-top:8px}
+.tabs{display:flex;gap:6px;border-bottom:1px solid var(--line);margin-bottom:22px;flex-wrap:wrap}
+.tabs button{border:0;background:none;padding:10px 16px;font:600 15px Inter,sans-serif;color:var(--mut);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--acc)}
+.tabs button:focus-visible,.install button:focus-visible,.btn:focus-visible,a:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.term{background:var(--term);border-radius:12px;padding:16px 18px;color:var(--termfg);font-size:12.5px;line-height:1.55}
+.term .cmd{white-space:nowrap;overflow-x:auto;color:var(--termfg);margin-top:12px;font-family:"JetBrains Mono",monospace;font-weight:500}
+.term .cmd:first-child{margin-top:0}
+.term .p{color:var(--termhi)}
+.term pre{margin:4px 0 0;overflow-x:auto;color:var(--termmut);font-size:12.5px;padding-bottom:4px}
+.chips{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px}
+.chip{font:600 12px "JetBrains Mono",monospace;padding:3px 9px;border-radius:99px;display:inline-block;margin-bottom:8px}
+.chip.hi{background:var(--hibg);color:var(--hi)}.chip.med{background:var(--medbg);color:var(--med)}.chip.low{background:var(--accbg);color:var(--acc)}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px;align-items:start}
+.two>*,.grid3>*,.chips>*{min-width:0}
+@media (max-width:760px){.two{grid-template-columns:minmax(0,1fr)}.hero{padding-top:44px}}
+.honest{border-left:3px solid var(--med);background:var(--medbg);padding:14px 18px;border-radius:0 10px 10px 0;margin-top:18px;font-size:15px}
+table{border-collapse:collapse;width:100%;font-size:14.5px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}
+.scroll{overflow-x:auto}
+ol.steps{padding-left:20px;margin:0}ol.steps li{margin-bottom:8px}
+footer{border-top:1px solid var(--line);padding-block:32px;color:var(--mut);font-size:14px}
+footer .wrap{display:flex;gap:18px;flex-wrap:wrap;justify-content:space-between}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+<a class="brand" href="#top"><svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true"><circle cx="8" cy="16" r="4" fill="#2f5fd0"/><circle cx="24" cy="8" r="4" fill="#1f7a5a"/><circle cx="24" cy="24" r="4" fill="#1f7a5a"/><path d="M12 15L20 9M12 17L20 23" stroke="#8a90a0" stroke-width="2"/></svg>Agent Graph Work Tree</a>
+<nav><a href="#examples">Examples</a><a href="#trust">Confidence</a><a href="#fresh">Staying fresh</a><a href="#evidence">Evidence</a><a class="gh" href="https://github.com/meabs/AgentGraphWorkTree">GitHub</a></nav>
+</div></header>
+
+<main id="top">
+<div class="wrap hero">
+<div class="kicker">For Claude Code, Codex, Cursor and GitHub Copilot</div>
+<h1>A code graph your agent can actually ask</h1>
+<p class="sub">Generated into your work tree from the source, with no language model in the loop. Agents run one command to learn who calls a method, what extends a class or what a change touches, instead of opening dozens of files.</p>
+<div class="cta"><a class="btn primary" href="#install">Install</a><a class="btn" href="https://github.com/meabs/AgentGraphWorkTree">View on GitHub</a><a class="btn" href="EVALUATION.html">Read the evaluation</a></div>
+<div class="install"><code id="cmd">./install.sh --repo ~/code/my-project</code><button id="copy" type="button">Copy</button></div>
+</div>
+
+<div class="wrap" style="padding-bottom:24px">
+<figure><img src="img/pipeline.svg" alt="Source files go through extractors to claims, then a graph, then the kg command and notes for agents"></figure>
+</div>
+
+<section class="block"><div class="wrap">
+<h2>What it gives an agent</h2>
+<p class="lede">Three things a grep loop does badly, each one command.</p>
+<div class="grid3">
+<div class="card"><h3>Precise answers</h3><p>Callers, dependents, routes and tests, each with a file and line to open. Java call links match compiled bytecode on 13,380 of 13,380 high-confidence claims.</p></div>
+<div class="card"><h3>Whole hierarchies</h3><p><code>kg subclasses</code> returns every subclass or implementer at any depth, optionally filtered to those that override a method.</p></div>
+<div class="card"><h3>Honest labels</h3><p>Every line is tagged <code>[high]</code> or <code>[medium]</code>, and agents are told the source wins when a generated line is wrong.</p></div>
+</div>
+</div></section>
+
+<section class="block" id="examples"><div class="wrap">
+<h2>Examples from real repositories</h2>
+<p class="lede">The diagrams below are drawn from the actual <code>graph.json</code> of each project, and the terminal output is what <code>kg</code> printed. Long package names are shortened with an ellipsis.</p>
+<div class="tabs" role="tablist" aria-label="Language"><button role="tab" aria-selected="true" aria-controls="p-java" data-tab="java">Java</button><button role="tab" aria-selected="false" aria-controls="p-python" data-tab="python">Python</button><button role="tab" aria-selected="false" aria-controls="p-typescript" data-tab="typescript">TypeScript</button></div>
+<section class="panel" id="p-java" role="tabpanel" >
+<p class="lede">Routes, the controllers that handle them and the repository they use. Every edge in the diagram is <code>[high]</code>: written in the source.</p>
+<figure><img src="img/routes-java.svg" alt="Java example diagram generated from the real graph" loading="lazy"><figcaption>Diagram drawn from the real <code>graph.json</code> of Spring Petclinic.</figcaption></figure>
+<div class="term" role="group" aria-label="Java terminal output"><div class="cmd"><span class="p">$</span> kg routes owner</div><pre class="res">route:GET /owners  -&gt; …owner.OwnerController#processFindForm  view=owners/findOwners [high] view=owners/ownersList [medium] redirect=redirect:/owners [high] redirect=redire…
+route:GET /owners/find  -&gt; …owner.OwnerController#initFindForm  view=owners/findOwners [high]  …/owner/OwnerController.java:89
+route:GET /owners/new  -&gt; …owner.OwnerController#initCreationForm  view=owners/createOrUpdateOwnerForm [medium]  …/owner/OwnerController.java:72
+route:GET /owners/{ownerId}  -&gt; …owner.OwnerController#showOwner  view=owners/ownerDetails [high]  …/owner/OwnerController.java:178</pre>
+<div class="cmd"><span class="p">$</span> kg callers findByLastNameStartingWith</div><pre class="res">  [medium] calls method:…owner.OwnerController#findPaginatedForOwnersLastName  …/owner/OwnerController.java:145)
+  [medium] calls method:…owner.OwnerControllerTests#processFindFormByLastName  …/owner/OwnerControllerTests.java:193)
+  [medium] calls method:…owner.OwnerControllerTests#processFindFormIgnoresSurroundingWhitespace  …/owner/OwnerControllerTests.java:202)</pre>
+<div class="cmd"><span class="p">$</span> kg tests OwnerController</div><pre class="res">  [high] tests type:…owner.OwnerControllerTests  …/owner/OwnerControllerTests.java:60</pre></div></section><section class="panel" id="p-python" role="tabpanel" hidden>
+<p class="lede">Every subclass of a Celery base class at any depth, in one call. The same query by hand is a loop of greps.</p>
+<figure><img src="img/hierarchy-python.svg" alt="Python example diagram generated from the real graph" loading="lazy"><figcaption>Diagram drawn from the real <code>graph.json</code> of Click and Celery.</figcaption></figure>
+<div class="term" role="group" aria-label="Python terminal output"><div class="cmd"><span class="p">$</span> kg subclasses Parameter</div><pre class="res">  d=1 [high] click.core.Argument (extends Parameter)  src/click/core.py:3800
+  d=1 [high] click.core.Option (extends Parameter)  src/click/core.py:2963
+2 subclasses</pre>
+<div class="cmd"><span class="p">$</span> kg subclasses BaseKeyValueStoreBackend</div><pre class="res">  d=1 [high] celery.backends.base.KeyValueStoreBackend (extends BaseKeyValueStoreBackend)  celery/backends/base.py:1420
+  d=1 [high] celery.backends.redis.RedisBackend (extends BaseKeyValueStoreBackend)  celery/backends/redis.py:372
+  d=2 [high] celery.backends.arangodb.ArangoDbBackend (extends KeyValueStoreBackend)  celery/backends/arangodb.py:23
+  d=2 [high] celery.backends.azureblockblob.AzureBlockBlobBackend (extends KeyValueStoreBackend)  celery/backends/azureblockblob.py:24
+  d=2 [high] celery.backends.cache.CacheBackend (extends KeyValueStoreBackend)  celery/backends/cache.py:183
+  d=2 [high] celery.backends.consul.ConsulBackend (extends KeyValueStoreBackend)  celery/backends/consul.py:27
+  …
+16 subclasses</pre>
+<div class="cmd"><span class="p">$</span> kg callers iter_params_for_processing</div><pre class="res">  [medium] calls method:click.core.Command#parse_args  src/click/core.py:1399</pre></div></section><section class="panel" id="p-typescript" role="tabpanel" hidden>
+<p class="lede">Callers of a function across React pages and Next.js route files. Dashed edges are <code>[medium]</code>: resolved by a rule, so check the cited line.</p>
+<figure><img src="img/callers-typescript.svg" alt="TypeScript example diagram generated from the real graph" loading="lazy"><figcaption>Diagram drawn from the real <code>graph.json</code> of Next.js and NestJS.</figcaption></figure>
+<div class="term" role="group" aria-label="TypeScript terminal output"><div class="cmd"><span class="p">$</span> kg callers getI18nPath</div><pre class="res">  [medium] calls method:src.app.[locale].(auth).(center).sign-in.[[...sign-in]].page.SignInPage#render  src/app/[locale]/(auth)/(center)/sign-in/[[...sign-in]]/page.tsx:27
+  [medium] calls method:src.app.[locale].(auth).(center).sign-up.[[...sign-up]].page.SignUpPage#render  src/app/[locale]/(auth)/(center)/sign-up/[[...sign-up]]/page.tsx:27
+  [medium] calls method:src.app.[locale].(auth).dashboard.user-profile.[[...user-profile]].page.UserProfilePage#render  src/app/[locale]/(auth)/dashboard/user-profile/[[...…
+  [medium] calls method:src.app.sitemap#sitemap  src/app/sitemap.ts:21</pre>
+<div class="cmd"><span class="p">$</span> kg dependents BaseTemplate</div><pre class="res">  [high] depends_on type:src.app.[locale].(auth).dashboard.layout [imports BaseTemplate]  src/app/[locale]/(auth)/dashboard/layout.tsx:6
+  [high] depends_on type:src.app.[locale].(marketing).layout [imports BaseTemplate]  src/app/[locale]/(marketing)/layout.tsx:5</pre>
+<div class="cmd"><span class="p">$</span> kg callers stripEndSlash   # NestJS</div><pre class="res">  [medium] calls method:packages.core.middleware.builder.MiddlewareBuilder.ConfigProxy#removeOverlappedRoutes  packages/core/middleware/builder.ts:127
+  [medium] calls method:packages.core.middleware.route-info-path-extractor.RouteInfoPathExtractor#constructor  packages/core/middleware/route-info-path-extractor.ts:22
+  [medium] calls method:packages.core.router.route-path-factory.RoutePathFactory#appendToAllIfDefined  packages/core/router/route-path-factory.ts:106
+  [medium] calls method:packages.core.router.route-path-factory.RoutePathFactory#create  packages/core/router/route-path-factory.ts:71
+  [medium] calls method:packages.platform-express.adapters.express-adapter.ExpressAdapter#normalizePrefix  packages/platform-express/adapters/express-adapter.ts:597</pre></div></section>
+</div></section>
+
+<section class="block" id="trust"><div class="wrap">
+<h2>Knowing what to trust</h2>
+<p class="lede">A graph that is sometimes wrong is only useful if the agent knows which parts. Each fact carries a tag, and the installer's instruction block tells agents how to treat each one.</p>
+<div class="chips">
+<div class="card"><span class="chip hi">[high]</span><p>Written in the source: a declaration, an import, an annotation, a literal path, a config entry.</p></div>
+<div class="card"><span class="chip med">[medium]</span><p>Derived by a fixed rule, such as a call target resolved from a declared type. Open the cited line before relying on it.</p></div>
+<div class="card"><span class="chip low">[low]</span><p>Reserved for claims written by a model. The format supports it; the installer never produces it.</p></div>
+</div>
+<div class="honest">Why it matters: on a repository whose code had drifted from its notes, unlabelled generated notes misled agents in <strong>8 of 24</strong> runs. With a tag or the trust-the-source instruction it was <strong>1 of 108</strong>.</div>
+</div></section>
+
+<section class="block" id="install"><div class="wrap">
+<h2>Install</h2>
+<div class="two"><div>
+<p class="lede" style="margin-bottom:12px">Needs git and Python 3.10 or newer. Run it once per repository, then commit the result.</p>
+<ol class="steps">
+<li>Copies the generator to <code>~/.local/share/agent-graph</code> with its own virtual environment.</li>
+<li>Generates <code>.agent-knowledge/</code> for the repository.</li>
+<li>Adds a marked block to <code>AGENTS.md</code>, <code>CLAUDE.md</code>, <code>.github/copilot-instructions.md</code> and a Cursor rule.</li>
+<li>Installs git hooks that keep the graph fresh.</li>
+</ol>
+</div>
+<div class="term"><div class="cmd"><span class="p">$</span> git clone https://github.com/meabs/AgentGraphWorkTree</div><div class="cmd"><span class="p">$</span> cd AgentGraphWorkTree</div><div class="cmd"><span class="p">$</span> ./install.sh --repo ~/code/my-project</div><pre class="res"># Windows PowerShell
+.\install.ps1 --repo C:\code\my-project
+
+# remove everything it added
+./install.sh --repo ~/code/my-project --uninstall</pre></div></div>
+</div></section>
+
+<section class="block" id="fresh"><div class="wrap">
+<h2>Staying fresh</h2>
+<p class="lede">The graph is a snapshot, so it has to follow the code. Two layers, both optional and both reversible.</p>
+<div class="two">
+<div class="card"><h3>Git hooks (default)</h3><p>The installer adds <code>post-merge</code>, <code>post-checkout</code>, <code>post-rewrite</code> and <code>pre-commit</code> hooks. The graph refreshes after a pull, a branch switch or a rebase, and a commit that touches source files carries its updated graph. Existing hooks are kept. Skip with <code>--no-hooks</code>.</p></div>
+<div class="card"><h3>GitHub Actions (<code>--ci</code>)</h3><p><code>--ci check</code> fails a pull request when the committed graph is stale. <code>--ci sync</code> regenerates it on pushes to <code>main</code> and commits it only when the claims changed. Both modes were run end to end on a test repository.</p></div>
+</div>
+</div></section>
+
+<section class="block" id="evidence"><div class="wrap">
+<h2>Evidence, without the gloss</h2>
+<p class="lede">The graph is accurate and agents use it. Whether it saves tokens depends on the repository and the agent.</p>
+<figure><img src="img/results.svg" alt="Bar chart: tokens per question with the graph as a percentage of no graph. Java 42 percent for Codex; Python and TypeScript rows mostly near or above 100 percent."></figure>
+<div class="scroll"><table>
+<thead><tr><th>Question</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td>Are the facts correct?</td><td>Java: 13,380 of 13,380 high and 8,947 of 8,957 medium call links match bytecode. Python: 87% of call edges whose caller ran were seen at runtime. TypeScript: 32 of 32 sampled edges correct.</td></tr>
+<tr><td>Do agents use it?</td><td>Yes. Claude Code, Codex, Cursor and the Copilot CLI all found and used <code>kg</code> from the generated instructions. 192 controlled runs gave correct answers in every arm.</td></tr>
+<tr><td>Does it save tokens?</td><td>On a large Java repository, yes: Codex used 398k tokens against 953k. On Python and TypeScript it did not reduce tokens overall; <code>kg subclasses</code> helped Codex on hierarchy questions (-16%) and did not help Claude Code.</td></tr>
+</tbody></table></div>
+<div class="honest">Small samples (two to four runs per cell), two agents and a handful of repositories. Read differences under about 20% as noise. Method, data and threats to validity are in the <a href="EVALUATION.html">full evaluation</a>.</div>
+</div></section>
+</main>
+
+<footer><div class="wrap"><span>MIT licensed. Java, Python, TypeScript and JavaScript.</span><span><a href="https://github.com/meabs/AgentGraphWorkTree">Source</a> · <a href="EVALUATION.html">Evaluation</a> · <a href="https://github.com/meabs/repo-knowledge-gen">Original experiments</a></span></div></footer>
+
+<script>
+(function(){
+  var tabs=document.querySelectorAll('[role=tab]'),panels=document.querySelectorAll('[role=tabpanel]');
+  function show(k){tabs.forEach(function(t){t.setAttribute('aria-selected',t.dataset.tab===k?'true':'false')});panels.forEach(function(p){p.hidden=p.id!=='p-'+k});try{history.replaceState(null,'','#'+k)}catch(e){}}
+  tabs.forEach(function(t){t.addEventListener('click',function(){show(t.dataset.tab)});t.addEventListener('keydown',function(e){var i=[].indexOf.call(tabs,t);if(e.key==='ArrowRight'||e.key==='ArrowLeft'){var n=tabs[(i+(e.key==='ArrowRight'?1:tabs.length-1))%tabs.length];n.focus();show(n.dataset.tab)}})});
+  var h=(location.hash||'').slice(1);if(h&&document.getElementById('p-'+h))show(h);
+  var b=document.getElementById('copy'),c=document.getElementById('cmd');
+  b.addEventListener('click',function(){var t=c.textContent;function done(){b.textContent='Copied';setTimeout(function(){b.textContent='Copy'},1500)}
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(done,function(){sel()})}else sel();
+    function sel(){var r=document.createRange();r.selectNodeContents(c);var s=getSelection();s.removeAllRanges();s.addRange(r);b.textContent='Press Ctrl+C'}});
+})();
+</script>
+</body>
+</html>

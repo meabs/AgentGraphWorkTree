@@ -15,10 +15,15 @@ A script parses the source (no language model involved) and writes `.agent-knowl
 | **Python** | Flask and FastAPI routes, dataclasses, test modules |
 | **TypeScript / JavaScript** | React, Express, NestJS, Next.js, React Router, `package.json` |
 
+![How the graph is built](docs/img/pipeline.svg)
+
+**[Project page with live examples](https://meabs.github.io/AgentGraphWorkTree/)** · [Evaluation](docs/EVALUATION.md)
+
 ## Contents
 
 - [Quick start](#quick-start)
 - [Using the graph](#using-the-graph)
+- [Examples](#examples)
 - [How it works](#how-it-works)
 - [Confidence tags](#confidence-tags)
 - [Language support](#language-support)
@@ -49,6 +54,7 @@ Installing as an APM package is also supported: `apm install meabs/AgentGraphWor
 2. Creates a private virtual environment there and installs `tree-sitter` with the Java and TypeScript grammars. Nothing is added to your global Python.
 3. Runs `kgen sync` on the repository to write `.agent-knowledge/`.
 4. Adds a marked block (`<!-- agent-graph:begin -->` … `<!-- agent-graph:end -->`) to `AGENTS.md`, to `CLAUDE.md` as an `@AGENTS.md` import, to `.github/copilot-instructions.md` and to `.cursor/rules/generated-knowledge.mdc`. Re-running refreshes the block and never touches text outside it.
+5. Installs git hooks that refresh the graph after a pull, checkout or rebase and on commit.
 
 | Option | Effect |
 | --- | --- |
@@ -57,7 +63,9 @@ Installing as an APM package is also supported: `apm install meabs/AgentGraphWor
 | `--harness LIST` | Which extra instruction files to write: any of `claude`, `copilot`, `cursor`, or `none`. |
 | `--no-agents-md` | Do not write any instruction files. |
 | `--labels MODE` | `confidence` (default), `tags` or `instruction`; see [Confidence tags](#confidence-tags). |
-| `--uninstall` | Remove the block and `.agent-knowledge/`. |
+| `--no-hooks` | Do not install the git hooks that keep the graph fresh. |
+| `--ci check\|sync` | Also write a GitHub Actions workflow; see [Keeping it fresh](#keeping-it-fresh). |
+| `--uninstall` | Remove the block, the hooks, a generated workflow and `.agent-knowledge/`. |
 
 ## Using the graph
 
@@ -87,6 +95,16 @@ incoming:
 methods:
   method two() -> int  src/main/java/demo/B.java:4
 ```
+
+## Examples
+
+Diagrams drawn from the real `graph.json` of each project (open the [project page](https://meabs.github.io/AgentGraphWorkTree/) for the terminal output next to them).
+
+![Every subclass of BaseKeyValueStoreBackend in Celery](docs/img/hierarchy-python.svg)
+
+![Routes, controllers and the repository in Spring Petclinic](docs/img/routes-java.svg)
+
+![Who calls getI18nPath in Next-js-Boilerplate](docs/img/callers-typescript.svg)
 
 ## How it works
 
@@ -136,7 +154,13 @@ Other languages need an extractor that emits the same claim records.
 
 ## Keeping it fresh
 
-The graph is a snapshot of one commit. Use the installed launcher (`~/.local/share/agent-graph/bin/kgen`, or `kgen.cmd` on Windows):
+The graph is a snapshot of one commit, so it has to follow the code. Two layers, both reversible.
+
+**Git hooks (installed by default).** The installer adds `post-merge`, `post-checkout`, `post-rewrite` and `pre-commit` hooks. The graph refreshes after a pull, a branch switch or a rebase, and a commit that touches source files carries its updated graph. Existing hooks are kept, the block is removed by `--uninstall`, and `--no-hooks` skips it. Hooks live in `.git/hooks`, so each teammate gets them by running the installer.
+
+**GitHub Actions (`--ci`).** `--ci check` writes a workflow that fails a pull request when the committed graph is stale. `--ci sync` writes one that regenerates the graph on pushes to `main` and commits it only when the claims changed. Both modes were run end to end on a test repository. The `sync` workflow pushes to `main`, so it needs a branch that allows the bot to push.
+
+You can also run the launcher by hand (`~/.local/share/agent-graph/bin/kgen`, or `kgen.cmd` on Windows):
 
 ```sh
 kgen sync   --repo .    # regenerate
@@ -144,7 +168,7 @@ kgen check  --repo .    # exit 1 and list stale or new files if sources changed 
 kgen verify --repo .    # confirm each claim still matches its cited line
 ```
 
-`kgen check` is suited to CI; regenerating on every merge is what the experiments assumed. The CI step itself has not been exercised, though the commands are tested. `kg stale` shows agents which files changed since the graph was built.
+`kg stale` shows agents which files changed since the graph was built.
 
 ## Evidence
 
@@ -165,6 +189,7 @@ The full method, data and caveats are in [docs/EVALUATION.md](docs/EVALUATION.md
 ## Development
 
 ```
+docs/                                  project page (GitHub Pages), evaluation, diagrams
 apm.yml                                APM package manifest
 install.sh, install.ps1                entry points
 .apm/skills/agent-graph/SKILL.md       agent instructions
