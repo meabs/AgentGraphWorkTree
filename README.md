@@ -91,6 +91,10 @@ Measured on Codex and Cursor over two Java projects (spring-petclinic and shopiz
 - **Notes without the graph cost more.** Generated markdown with no graph used 2.1M tokens on shopizer, the most of any setup.
 - **Alternatives tried.** A model-built graph (Graphiti) cost $1.50 and 29 minutes for petclinic and found 3 of 16 routes. Another tree-sitter tool (CodeGraphContext) had 48.5% correct call links on shopizer; a third (CodeGraph) scored 83% and saved no tokens.
 
+## Checked with live agents
+
+One question ("which HTTP routes does OwnerController handle, and which repository methods does it call?") on a fresh clone of spring-petclinic with the installer's output, asked once to each agent in non-interactive mode (claude 2.1.296 (Claude Code); cursor-agent 2026.10.01-14929f9; codex codex-cli 0.157.0; copilot GitHub Copilot CLI 1.0.95.). All four found and used `.agent-knowledge/bin/kg` without being told where it was, and all four gave the same correct answer: 7 routes and 3 `OwnerRepository` methods (`findById`, `save`, `findByLastNameStartingWith`). Each also opened the source file or checked the cited lines. This shows the instruction files are picked up by Claude Code (through `CLAUDE.md`), Codex (`AGENTS.md`), Cursor (the rule file) and the Copilot CLI (`.github/copilot-instructions.md`). It is one run each and says nothing about token savings; those figures come from the experiments above. VS Code Copilot agent mode was not tried.
+
 ## Limits
 
 - Java only. Other languages need a new extractor that emits the same claim records.
