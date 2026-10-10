@@ -1,6 +1,6 @@
 ---
 name: agent-graph
-description: Use the generated code graph and notes in .agent-knowledge/ to answer structure questions in a Java or Python repository (who calls what, what a change touches, which routes exist) without reading many files, or install the generator when the user asks.
+description: Use the generated code graph and notes in .agent-knowledge/ to answer structure questions in a Java, Python, TypeScript or JavaScript repository (who calls what, what a change touches, which routes exist, which components render which) without reading many files, or install the generator when the user asks.
 ---
 
 # Agent graph
@@ -28,4 +28,4 @@ python <this-skill-dir>/install.py --repo <project>
 # macOS/Linux also: sh install.sh ...   Windows PowerShell also: .\install.ps1 ...
 ```
 
-This copies the generator to `~/.local/share/agent-graph` (`%LOCALAPPDATA%\agent-graph` on Windows) with its own virtual environment, writes `.agent-knowledge/`, and adds a marked block to `AGENTS.md`, `CLAUDE.md` (an `@AGENTS.md` import), `.github/copilot-instructions.md` and a Cursor rule, for the user to review and commit. Needs git and Python 3.10+. Java and Python only: it exits without changing anything when the repository has no tracked `.java` or `.py` files. Undo with `--uninstall`.
+This copies the generator to `~/.local/share/agent-graph` (`%LOCALAPPDATA%\agent-graph` on Windows) with its own virtual environment, writes `.agent-knowledge/`, and adds a marked block to `AGENTS.md`, `CLAUDE.md` (an `@AGENTS.md` import), `.github/copilot-instructions.md` and a Cursor rule, for the user to review and commit. Needs git and Python 3.10+. Java, Python, TypeScript and JavaScript only: it exits without changing anything when the repository has no tracked files in those languages. Undo with `--uninstall`.

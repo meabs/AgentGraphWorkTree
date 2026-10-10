@@ -18,7 +18,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - run: pip install pytest tree-sitter tree-sitter-java
+      - run: pip install pytest tree-sitter tree-sitter-java tree-sitter-typescript
       - run: git config --global user.email ci@example.com && git config --global user.name ci
       - run: python -m pytest -q
         working-directory: .apm/skills/agent-graph/tool
@@ -50,3 +50,14 @@ jobs:
           python ../.apm/skills/agent-graph/install.py --repo . --home "$RUNNER_TEMP/ag2"
           python .agent-knowledge/kg.py callers two > callers.txt
           grep -q "pkg.a#one" callers.txt
+      - name: TypeScript repository smoke test
+        shell: bash
+        run: |
+          mkdir tsproj && cd tsproj && git init -q
+          mkdir -p src
+          printf 'export class B {\n  two() { return 2; }\n}\n' > src/b.ts
+          printf 'import { B } from "./b";\n\nexport function one() {\n  return new B().two();\n}\n' > src/a.ts
+          git add . && git commit -q -m init
+          python ../.apm/skills/agent-graph/install.py --repo . --home "$RUNNER_TEMP/ag3"
+          python .agent-knowledge/kg.py callers two > callers.txt
+          grep -q "src.a#one" callers.txt

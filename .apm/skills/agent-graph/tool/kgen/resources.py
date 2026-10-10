@@ -176,3 +176,44 @@ def openapi_claims(path: str, data: bytes, methods: dict[str, list[tuple[str, st
             for mid in (web or hits)[:3]:
                 out.append(_claim(rid, "handled_by", mid, MEDIUM, "OpenAPI operationId equals a method name in the same module (the interface itself may be generated at build time)", path, ln, ev, "openapi", http=verb, path=pth))
     return out
+
+
+def package_json(path: str, data: bytes) -> list[Claim]:
+    """Name, version, engines, scripts and dependencies of the root package.json, as the same claims pom.xml yields."""
+    try:
+        pkg = json.loads(data.decode("utf-8", "replace"))
+    except ValueError:
+        return []
+    if not isinstance(pkg, dict):
+        return []
+    lines = data.decode("utf-8", "replace").splitlines()
+
+    def find(needle):
+        for i, raw in enumerate(lines, 1):
+            if needle in raw:
+                return i
+        return 1
+
+    def ev(n):
+        return lines[n - 1] if 0 < n <= len(lines) else ""
+
+    out = []
+    if isinstance(pkg.get("name"), str):
+        ln = find('"name"')
+        out.append(_claim("build:project", "has_coordinates", f"{pkg['name']}@{pkg.get('version', '?')}", HIGH, "package.json name and version", path, ln, ev(ln), "package-json"))
+    engines = pkg.get("engines")
+    for k, v in (engines.items() if isinstance(engines, dict) else []):
+        ln = find(f'"{k}"')
+        out.append(_claim("build:project", "has_property", f"engines.{k}={v}", HIGH, "package.json engines", path, ln, ev(ln), "package-json"))
+    scripts = pkg.get("scripts")
+    for k, v in (scripts.items() if isinstance(scripts, dict) else []):
+        if isinstance(v, str):
+            ln = find(f'"{k}"')
+            shown = "[redacted]" if SECRET.search(v) else v[:160]
+            out.append(_claim("build:project", "has_property", f"script {k}: {shown}", HIGH, "package.json script", path, ln, ev(ln) if shown == v[:160] else f'"{k}": "[redacted]"', "package-json"))
+    for group, scope in (("dependencies", "runtime"), ("devDependencies", "dev"), ("peerDependencies", "peer")):
+        deps = pkg.get(group)
+        for k, v in (deps.items() if isinstance(deps, dict) else []):
+            ln = find(f'"{k}"')
+            out.append(_claim("build:project", "depends_on_library", f"{k}@{v}", HIGH, f"package.json {group}", path, ln, ev(ln), "package-json", scope=scope))
+    return out

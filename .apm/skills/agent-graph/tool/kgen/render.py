@@ -256,7 +256,7 @@ def render_all(claims: list[Claim], graph: dict, manifest: dict, mode: str = "co
             d.add(f"- `{c.subject.split(':', 1)[1]}` = `{c.object}` {d.use(c)}")
     out[d.path] = d
 
-    d = Doc("okf/build.md", "build", "Build and dependencies", "Maven coordinates, Java version, libraries and plugins declared in pom.xml.", resource="pom.xml", tags=["maven"])
+    d = Doc("okf/build.md", "build", "Build and dependencies", "Coordinates, properties, scripts, libraries and plugins declared in pom.xml or package.json.", tags=["build"])
     d.add("# Build")
     for pred, title in (("has_coordinates", "Project"), ("has_parent", "Parent"), ("has_property", "Properties"), ("depends_on_library", "Libraries"), ("uses_plugin", "Plugins")):
         cs = by_pred[pred]
@@ -309,7 +309,7 @@ def render_all(claims: list[Claim], graph: dict, manifest: dict, mode: str = "co
         "okf/routes.md": bool(by_pred["handled_by"]),
         "okf/data-model.md": any(by_pred[k] for k in ("has_field", "maps_to_table", "has_column", "relates_to", "manages", "references", "has_query")),
         "okf/configuration.md": bool(by_pred["has_value"]),
-        "okf/build.md": any(c.file == "pom.xml" for c in claims),
+        "okf/build.md": any(c.file in ("pom.xml", "package.json") for c in claims),
     }
     for rel, present in has.items():  # a page with nothing on it only costs an agent a read
         if not present:

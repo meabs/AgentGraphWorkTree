@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the code graph and notes for a Java or Python repository and tell agents to use them (Windows, macOS, Linux).
+"""Generate the code graph and notes for a Java, Python, TypeScript or JavaScript repository and tell agents to use them (Windows, macOS, Linux).
 
   python install.py --repo PATH [--home DIR] [--labels confidence|tags|instruction] [--no-agents-md]
                     [--harness claude,copilot,cursor|none] [--uninstall]
@@ -49,8 +49,8 @@ def ensure_env(home: Path) -> Path:
         print(f"creating a virtual environment at {home / 'venv'}")
         if run(sys.executable, "-m", "venv", str(home / "venv")).returncode:
             sys.exit("could not create a virtual environment (on Debian/Ubuntu: apt install python3-venv)")
-    if run(str(py), "-c", "import tree_sitter, tree_sitter_java", capture_output=True).returncode:
-        print("installing tree-sitter and tree-sitter-java")
+    if run(str(py), "-c", "import tree_sitter, tree_sitter_java, tree_sitter_typescript", capture_output=True).returncode:
+        print("installing tree-sitter and its Java and TypeScript grammars")
         if run(str(py), "-m", "pip", "install", "--quiet", "-r", str(home / "requirements.txt")).returncode:
             sys.exit("pip could not install tree-sitter; check your network and Python version (3.10 or newer)")
     return py
@@ -66,7 +66,7 @@ def write_launchers(home: Path, py: Path) -> None:
 
 
 def source_count(repo: Path) -> int:
-    return len(run("git", "-C", str(repo), "ls-files", "*.java", "*.py", capture_output=True).stdout.split())
+    return len(run("git", "-C", str(repo), "ls-files", "*.java", "*.py", "*.ts", "*.tsx", "*.js", "*.jsx", "*.mjs", "*.cjs", "*.mts", "*.cts", capture_output=True).stdout.split())
 
 
 def snippet_of(repo: Path) -> str:
@@ -142,7 +142,7 @@ def main() -> int:
     if args.uninstall:
         return uninstall(repo)
     if not source_count(repo):
-        sys.exit("no tracked .java or .py files: this generator reads Java and Python only. Nothing was changed.")
+        sys.exit("no tracked Java, Python, TypeScript or JavaScript files: this generator reads those only. Nothing was changed.")
 
     home = (args.home or default_home()).resolve()
     home.mkdir(parents=True, exist_ok=True)

@@ -11,10 +11,14 @@ from . import VERSION
 from .claims import HIGH, LOW, MEDIUM, RANK, Claim, dump_claims, sha256_file
 from .java import JavaExtractor
 from .python_lang import PyExtractor
+from .typescript_lang import TsExtractor
 from . import resources
 
 OUT = ".agent-knowledge"
-SKIP_DIRS = {".git", "target", "build", "node_modules", ".gradle", ".idea", OUT, "venv", ".venv", "__pycache__", "site-packages", ".tox", "dist", ".mypy_cache", ".pytest_cache", ".eggs"}
+SKIP_DIRS = {".next", ".nuxt", ".turbo", ".cache", "coverage", "bower_components", ".parcel-cache", ".svelte-kit", ".angular", ".git", "target", "build", "node_modules", ".gradle", ".idea", OUT, "venv", ".venv", "__pycache__", "site-packages", ".tox", "dist", ".mypy_cache", ".pytest_cache", ".eggs"}
+TS_EXTS = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts")
+MAX_SOURCE_BYTES = 500_000
+ROOT_FILES = {"package.json", "tsconfig.json", "jsconfig.json"}
 EDGE_PREDICATES = {"declares_type", "extends", "implements", "depends_on", "calls", "instantiates", "handled_by", "renders", "maps_to_table",
                    "relates_to", "manages", "tests", "references", "has_method", "defined_in", "implicitly_depends_on"}
 
@@ -32,11 +36,13 @@ def source_files(repo: Path) -> dict[str, bytes]:
         if set(Path(rel).parts) & SKIP_DIRS:
             continue
         low = rel.lower()
-        if low.endswith((".java", ".py", ".properties", ".sql", ".html")) or rel == "pom.xml" or resources.OPENAPI_FILE.search(rel):
+        if low.endswith((".java", ".py", ".properties", ".sql", ".html") + TS_EXTS) and not low.endswith((".d.ts", ".d.mts", ".d.cts", ".min.js")) or rel in ROOT_FILES or rel == "pom.xml" or resources.OPENAPI_FILE.search(rel):
             if low.endswith(".properties") and "messages" in low:
                 continue
             f = repo / rel
             if f.is_file():
+                if low.endswith(TS_EXTS + (".py",)) and f.stat().st_size > MAX_SOURCE_BYTES:
+                    continue  # bundles and generated code
                 out[rel] = f.read_bytes()
     return out
 
@@ -44,6 +50,9 @@ def source_files(repo: Path) -> dict[str, bytes]:
 def extract(files: dict[str, bytes]) -> list[Claim]:
     templates = {v for p in files if (v := resources.template_view(p))}
     claims = JavaExtractor({p: d for p, d in files.items() if p.endswith(".java")}, templates).run()
+    ts = {p: d for p, d in files.items() if p.lower().endswith(TS_EXTS)}
+    if ts:
+        claims += TsExtractor(ts, {k: files[k] for k in ("tsconfig.json", "jsconfig.json") if k in files}).run()
     py = {p: d for p, d in files.items() if p.endswith(".py")}
     if py:
         claims += PyExtractor(py).run()
@@ -54,6 +63,8 @@ def extract(files: dict[str, bytes]) -> list[Claim]:
             claims += resources.sql_schema(p, d)
         elif p == "pom.xml":
             claims += resources.pom(p, d)
+        elif p == "package.json":
+            claims += resources.package_json(p, d)
     methods: dict[str, list[tuple[str, str]]] = {}
     for c in claims:
         if c.predicate == "has_method":
