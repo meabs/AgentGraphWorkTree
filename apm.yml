@@ -1,4 +1,4 @@
 name: agent-graph
-version: 0.3.0
+version: 0.3.1
 description: Deterministic, confidence-tagged code graph and notes for Java, Python, TypeScript and JavaScript repositories, generated into the work tree so agents can query structure instead of reading files
 author: garry

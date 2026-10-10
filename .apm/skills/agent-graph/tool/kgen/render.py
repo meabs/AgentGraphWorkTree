@@ -404,6 +404,13 @@ Each line is labelled """ + label_list() + f". Open the cited file before relyin
     elif COMPONENTS == "graph":
         snippet = snippet.replace("Start with `.agent-knowledge/okf/index.md`, or query the graph with `.agent-knowledge/bin/kg`.", "Query it with `.agent-knowledge/bin/kg`.").replace("documentation and a code graph", "a code graph").replace("holds documentation and", "holds")
     if COMPONENTS != "docs":
+        snippet += (
+            "For structural questions, run `kg` before grep or reading files; it answers from the parsed code in one call:\n"
+            "- who calls a method: `kg callers <method>`; what breaks if it changes: `kg impact <type or method>`\n"
+            "- who uses, extends or implements a type: `kg dependents <type>`; what a type uses: `kg deps <type>`\n"
+            "- which routes a controller or module handles: `kg routes`; which tests cover a type: `kg tests <type>`\n"
+            "- find a name: `kg find <text>`; describe one entity: `kg show <id>`\n"
+        )
         snippet += f"Command reference: `.agent-knowledge/skills/{name}/SKILL.md`.\n"
     if FRESHNESS:
         snippet += "Run `.agent-knowledge/bin/kg stale` first. It lists source files that changed since the knowledge was generated; treat generated claims that cite those files as out of date and read the source instead.\n"
