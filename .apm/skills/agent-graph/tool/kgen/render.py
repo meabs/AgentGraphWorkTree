@@ -344,6 +344,7 @@ def render_all(claims: list[Claim], graph: dict, manifest: dict, mode: str = "co
     cmds = """## Commands (`.agent-knowledge/bin/kg`)
 - `kg show <Class|Class#method|route>`: what it is, where it is, everything it connects to.
 - `kg callers <Class#method>` and `kg dependents <Class>`: who uses it.
+- `kg subclasses <Class> [--overrides method]`: every subclass or implementer at any depth.
 - `kg impact <Class>`: transitive users, routes, templates and tests to re-check after a change.
 - `kg routes [text]`, `kg entity <Name>`, `kg tests <Class>`, `kg path <A> <B>`, `kg find <text>`.
 """
@@ -407,7 +408,8 @@ Each line is labelled """ + label_list() + f". Open the cited file before relyin
         snippet += (
             "For structural questions, run `kg` before grep or reading files; it answers from the parsed code in one call:\n"
             "- who calls a method: `kg callers <method>`; what breaks if it changes: `kg impact <type or method>`\n"
-            "- who uses, extends or implements a type: `kg dependents <type>`; what a type uses: `kg deps <type>`\n"
+            "- who uses a type: `kg dependents <type>`; what a type uses: `kg deps <type>`\n"
+            "- every subclass or implementer at any depth, in one call: `kg subclasses <type>` (add `--overrides <method>` to keep those that define it)\n"
             "- which routes a controller or module handles: `kg routes`; which tests cover a type: `kg tests <type>`\n"
             "- find a name: `kg find <text>`; describe one entity: `kg show <id>`\n"
         )

@@ -97,3 +97,24 @@ def test_import_edges_name_the_imported_symbols(tmp_path: Path):
     assert imp["attrs"]["symbols"] == ["User"]
     graph = json.loads((repo / gen.OUT / "graph.json").read_text(encoding="utf-8"))
     assert any(e["from"] == "type:app.service" and e["to"] == "type:app.models" and e.get("symbols") == ["User"] for e in graph["edges"])
+
+
+def test_subclasses_lists_every_depth_and_filters_by_override(tmp_path: Path):
+    repo = tmp_path / "r"
+    (repo / "p").mkdir(parents=True)
+    (repo / "p/__init__.py").write_text("", encoding="utf-8")
+    (repo / "p/a.py").write_text("class A:\n    def go(self): ...\n\n\nclass B(A):\n    def go(self): ...\n\n\nclass C(B):\n    pass\n\n\nclass D(A):\n    pass\n", encoding="utf-8")
+    (repo / "p/test_a.py").write_text("from p.a import A\n\n\nclass TestSub(A):\n    pass\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+    gen.generate(repo)
+    kg = repo / gen.OUT / "kg.py"
+
+    def run(*args):
+        return subprocess.run([sys.executable, str(kg), "subclasses", "A", *args], capture_output=True, text=True, check=True).stdout
+
+    full = run()
+    assert "d=1" in full and "p.a.B" in full and "d=2" in full and "p.a.C" in full and "p.a.D" in full and "3 subclasses" in full
+    assert "TestSub" not in full and "TestSub" in run("--include-tests")
+    only = run("--overrides", "go")
+    assert "p.a.B" in only and "p.a.C" not in only and "1 of 3 subclasses" in only

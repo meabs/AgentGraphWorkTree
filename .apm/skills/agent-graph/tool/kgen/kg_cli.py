@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import re
 import sys
 from collections import defaultdict, deque
 from pathlib import Path
@@ -123,6 +124,43 @@ def cmd_dependents(args):
 
 def cmd_callers(args):
     edges_to(args, {"calls"}, True)
+
+
+TEST_PATH = re.compile(r"(^|/)(tests?|__tests__|spec|specs|testing)(/|$)|\.(test|spec)\.[a-z]+$|(^|/)test_[^/]*\.py$|_test\.py$|(^|/)t/")
+
+
+def is_test_node(n):
+    return n.get("role") == "test" or bool(TEST_PATH.search(n.get("file") or ""))
+
+
+def cmd_subclasses(args):
+    """Every class that extends or implements the type, at any depth, one line each."""
+    g, nodes, out, inc = load()
+    types = {i: n for i, n in nodes.items() if i.startswith("type:") and n.get("kind_of") != "module"} or {i: n for i, n in nodes.items() if i.startswith("type:")}
+    start = pick(types, args.name)
+    wanted = args.overrides
+    seen = {start}
+    q = deque([(start, 0)])
+    rows = []
+    while q:
+        cur, d = q.popleft()
+        for e in sorted(inc[cur], key=lambda x: x["from"]):
+            if e["predicate"] not in ("extends", "implements") or not keep(e, args) or e["from"] in seen:
+                continue
+            seen.add(e["from"])
+            q.append((e["from"], d + 1))
+            if is_test_node(nodes[e["from"]]) and not args.include_tests:
+                continue
+            own = {nodes[x["to"]].get("name") for x in out[e["from"]] if x["predicate"] == "has_method"}
+            rows.append((d + 1, e, own))
+    shown = [r for r in rows if not wanted or wanted in r[2]]
+    for d, e, own in shown:
+        mark = f" defines {wanted}" if wanted else ""
+        print(f"  d={d} {tg(e['confidence'])}{e['from'].split(':', 1)[1]} ({e['predicate']} {e['to'].split(':', 1)[1].rsplit('.', 1)[-1]}){mark}  {loc(e)}")
+    if not shown:
+        print("no subclasses (in the graph)" if not wanted else f"no subclass defines {wanted} (in the graph)")
+    else:
+        print(f"{len(shown)} of {len(rows)} subclasses" if wanted else f"{len(rows)} subclasses")
 
 
 def cmd_impact(args):
@@ -268,7 +306,7 @@ def main(argv=None):
     p.add_argument("--min", choices=("high", "medium", "low"), default="low", help="hide edges below this confidence")
     sub = p.add_subparsers(dest="cmd", required=True)
     for name, fn, extra in (("show", cmd_show, ["name"]), ("find", cmd_find, ["name"]), ("deps", cmd_deps, ["name"]), ("dependents", cmd_dependents, ["name"]),
-                            ("callers", cmd_callers, ["name"]), ("impact", cmd_impact, ["name"]), ("entity", cmd_entity, ["name"]), ("tests", cmd_tests, ["name"]),
+                            ("callers", cmd_callers, ["name"]), ("subclasses", cmd_subclasses, ["name"]), ("impact", cmd_impact, ["name"]), ("entity", cmd_entity, ["name"]), ("tests", cmd_tests, ["name"]),
                             ("path", cmd_path, ["a", "b"]), ("routes", cmd_routes, []), ("stats", cmd_stats, [])) + ((("stale", cmd_stale, []),) if "cmd_stale" in globals() else ()):
         s = sub.add_parser(name)
         s.add_argument("--min", choices=("high", "medium", "low"), default="low")
@@ -278,6 +316,9 @@ def main(argv=None):
             s.add_argument("text", nargs="?")
         if name == "impact":
             s.add_argument("--depth", type=int, default=4)
+        if name == "subclasses":
+            s.add_argument("--overrides", metavar="METHOD", help="only subclasses that define this method")
+            s.add_argument("--include-tests", action="store_true", help="also list classes in test files")
         s.set_defaults(fn=fn)
     args = p.parse_args(argv)
     args.fn(args)
