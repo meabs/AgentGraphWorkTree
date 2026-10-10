@@ -217,6 +217,7 @@ class TsExtractor:
         c = Cls(fqn, name, m, node, kind, decorators=decorators)
         body = node.child_by_field_name("body")
         pending = []
+        nested = []
         for member in (body.children if body is not None else []):
             if member.type == "decorator":
                 pending.append(member)
@@ -230,9 +231,13 @@ class TsExtractor:
                 value = member.child_by_field_name("value")
                 if value is not None and value.type in ("arrow_function", "function_expression"):
                     c.methods[text(mname)] = (member, pending)
+                elif value is not None and value.type in ("class", "class_expression"):  # static Proxy = class implements X { ... }
+                    nested.append((value, f"{name}.{text(mname)}"))
             pending = []
         self.classes[fqn] = c
         m.names[name] = ("cls", fqn)
+        for value, nested_name in nested:
+            self.define_class(m, value, "class", nested_name, [])
         return c
 
     def define_function(self, m, node, name, fn, decorators=()):

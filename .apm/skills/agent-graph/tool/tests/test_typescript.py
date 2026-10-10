@@ -134,3 +134,16 @@ def test_import_edges_name_the_imported_symbols(tmp_path: Path):
     repo = build(tmp_path)
     imp = next(x for x in claims(repo) if x["predicate"] == "depends_on" and x["subject"] == "type:src.services.service" and x["object"] == "type:src.services.repo")
     assert imp["attrs"]["symbols"] == ["MemRepo", "UserRepo"]
+
+
+def test_class_expression_in_a_static_field_is_collected(tmp_path: Path):
+    files = {"src/u.ts": "export const strip = (p: string) => p;\n",
+             "src/b.ts": "import { strip } from './u';\nexport class B {\n  static readonly Proxy = class {\n    run(x: string) { return strip(x); }\n  };\n}\n"}
+    repo = tmp_path / "r"
+    for rel, body in files.items():
+        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+        (repo / rel).write_text(body, encoding="utf-8")
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+    gen.generate(repo)
+    assert ("method:src.b.B.Proxy#run", "method:src.u#strip", "medium") in edges(repo, "calls")
