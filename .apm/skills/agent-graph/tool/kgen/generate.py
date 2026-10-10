@@ -25,7 +25,7 @@ def git(repo: Path, *args: str) -> str:
 
 def source_files(repo: Path) -> dict[str, bytes]:
     listed = git(repo, "ls-files", "-z")
-    paths = [p for p in listed.split("\0") if p] if listed else [str(p.relative_to(repo)) for p in repo.rglob("*") if p.is_file()]
+    paths = [p for p in listed.split("\0") if p] if listed else [p.relative_to(repo).as_posix() for p in repo.rglob("*") if p.is_file()]
     out = {}
     for rel in sorted(paths):
         if set(Path(rel).parts) & SKIP_DIRS:
@@ -195,7 +195,7 @@ def generate(repo: Path, out_dir: Path | None = None, mode: str = "confidence", 
             written.append(rel)
     if components != "docs":
         (out / "bin" / "kg").chmod(0o755)
-    stale = [str(p.relative_to(out)) for p in out.rglob("*") if out_dir is None and p.is_file() and str(p.relative_to(out)) not in files_out]
+    stale = [p.relative_to(out).as_posix() for p in out.rglob("*") if out_dir is None and p.is_file() and p.relative_to(out).as_posix() not in files_out]
     for rel in stale:
         (out / rel).unlink()
     return {"claims": len(claims), "by_confidence": by_conf, "written": written, "removed": stale, "docs": len(docs)}
