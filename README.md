@@ -1,7 +1,7 @@
 # Agent Graph Work Tree
 
 [![CI](https://github.com/meabs/AgentGraphWorkTree/actions/workflows/test.yml/badge.svg)](https://github.com/meabs/AgentGraphWorkTree/actions/workflows/test.yml)
-![version](https://img.shields.io/badge/version-0.3.6-blue)
+![version](https://img.shields.io/badge/version-0.4.0-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 
@@ -48,7 +48,43 @@ Review and commit `.agent-knowledge/` and the instruction files the installer wr
 
 Installing as an APM package is also supported: `apm install meabs/AgentGraphWorkTree --target claude` places the skill, and its `install.py` generates the graph.
 
-### What the installer does
+### Tuning per agent
+
+The graph does not help every agent on every question. In the 48-run trial on Click, `kg callers --depth 3` cut Codex and Cursor's tokens to about a third, and left Copilot level (see [docs/EVALUATION.md](docs/EVALUATION.md)). `kgen route` turns [AgentTrialRig](https://github.com/meabs/AgentTrialRig) results into advice you can paste into the instruction file for that agent:
+
+```sh
+kgen route trial-results/graph-multi --trial graph.toml               # a table per agent and question kind
+kgen route trial-results/graph-multi --trial graph.toml --agent cursor  # one paragraph for that agent's instructions
+```
+
+```text
+## codex
+
+| question kind | command | graph vs plain (95% CI) | runs per arm | advice |
+| --- | --- | --- | --- | --- |
+| class hierarchy | `kg subclasses <Class>` | - | 2 | not enough runs |
+| direct callers | `kg callers <method>` | - | 2 | not enough runs |
+| transitive callers | `kg callers <method> --depth 3` | 0.37 (0.29 to 0.49) | 8 | use kg |
+
+## copilot
+
+| question kind | command | graph vs plain (95% CI) | runs per arm | advice |
+| --- | --- | --- | --- | --- |
+| class hierarchy | `kg subclasses <Class>` | - | 2 | not enough runs |
+| direct callers | `kg callers <method>` | - | 2 | not enough runs |
+| transitive callers | `kg callers <method> --depth 3` | 1.13 (0.98 to 1.30) | 8 | either |
+
+## cursor
+
+| question kind | command | graph vs plain (95% CI) | runs per arm | advice |
+| --- | --- | --- | --- | --- |
+| class hierarchy | `kg subclasses <Class>` | - | 2 | not enough runs |
+| direct callers | `kg callers <method>` | - | 2 | not enough runs |
+```
+
+Question kinds come from words in each prompt (levels, inherit, route, impact and so on). Advice needs at least four runs per arm for that agent and kind; fewer is reported as not enough runs rather than guessed. The kinds above that have two runs are not yet advice.
+
+## What the installer does
 
 1. Copies the generator to `~/.local/share/agent-graph` (`%LOCALAPPDATA%\agent-graph` on Windows; override with `--home` or `AGENT_GRAPH_HOME`).
 2. Creates a private virtual environment there and installs `tree-sitter` with the Java and TypeScript grammars. Nothing is added to your global Python.

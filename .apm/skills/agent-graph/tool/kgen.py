@@ -74,6 +74,17 @@ def cmd_audit(a):
     return 0
 
 
+def cmd_route(a):
+    from kgen import route
+
+    rows = route.advise(route.load(Path(a.results), Path(a.trial) if a.trial else None, a.plain, a.graph), a.plain, a.graph, a.min_runs)
+    if a.agent:
+        print(route.instruction(rows, a.agent))
+    else:
+        print(route.markdown(rows))
+    return 0
+
+
 def main():
     p = argparse.ArgumentParser(prog="kgen")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -92,6 +103,14 @@ def main():
             s.add_argument("--components", choices=("docs", "graph", "both"), default="both")
             s.add_argument("--extra-claims", help="JSONL of model-inferred claims (tier low)")
         s.set_defaults(fn=fn)
+    r = sub.add_parser("route", help="per-agent advice on when to use kg, from AgentTrialRig results")
+    r.add_argument("results", help="a trialrig results folder with a plain arm and a graph arm")
+    r.add_argument("--trial", help="the trial's TOML, so questions are typed by their prompt (default: by id)")
+    r.add_argument("--plain", default="plain")
+    r.add_argument("--graph", default="graph")
+    r.add_argument("--min-runs", type=int, default=4)
+    r.add_argument("--agent", help="print only the one-paragraph instruction for this agent")
+    r.set_defaults(fn=cmd_route)
     a = p.parse_args()
     sys.exit(a.fn(a))
 
