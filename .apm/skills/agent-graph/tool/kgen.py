@@ -67,12 +67,23 @@ def cmd_verify(a):
     return 1 if bad else 0
 
 
+def cmd_audit(a):
+    from kgen import audit
+
+    print(audit.report(audit.audit(Path(a.repo).resolve(), a.sample, a.seed, a.show)))
+    return 0
+
+
 def main():
     p = argparse.ArgumentParser(prog="kgen")
     sub = p.add_subparsers(dest="cmd", required=True)
-    for n, fn in (("sync", cmd_sync), ("check", cmd_check), ("verify", cmd_verify)):
+    for n, fn in (("sync", cmd_sync), ("check", cmd_check), ("verify", cmd_verify), ("audit", cmd_audit)):
         s = sub.add_parser(n)
         s.add_argument("--repo", required=True)
+        if n == "audit":
+            s.add_argument("--sample", type=int, default=300, help="call edges to spot-check")
+            s.add_argument("--seed", type=int, default=1)
+            s.add_argument("--show", type=int, default=8, help="examples to print")
         if n == "sync":
             s.add_argument("--labels", choices=("confidence", "provenance", "none", "tags", "instruction"), default="confidence")
             s.add_argument("--freshness", action="store_true")

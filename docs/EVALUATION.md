@@ -22,7 +22,16 @@ What was measured, how, and what it does and does not show. Numbers are quoted f
 
 **Python.** Click's own tests were run under a call tracer. 378 of the 433 call edges whose caller ran (87%) were seen at runtime; the remainder were real branches the tests do not reach, or dynamic dispatch. In the other direction, the graph contains 60% of the caller-to-callee pairs the run observed, missing mostly callbacks passed as arguments, dunder methods and import-time code. This is a lower bound on precision for one project, not a bytecode-exact check.
 
-**TypeScript and JavaScript.** 32 randomly chosen call, instantiation and JSX edges from Express, zustand, Next-js-Boilerplate and the NestJS starter were checked against the source; all 32 were correct. Recall was not measured. It is lower for untyped JavaScript, where a method called on a value of unknown type produces no claim (Express yields few call links for this reason).
+**TypeScript and JavaScript.** 32 randomly chosen call, instantiation and JSX edges from Express, zustand, Next-js-Boilerplate and the NestJS starter were checked against the source; all 32 were correct. Recall was not measured at the time (see `kgen audit` below). It is lower for untyped JavaScript, where a method called on a value of unknown type produces no claim (Express yields few call links for this reason).
+
+**`kgen audit`** (0.3.6) repeats this check on any repository, with no compiler or test run. Precision: the share of sampled `calls` edges whose cited line really calls the callee. Recall (a lower bound): the share of textual call sites of uniquely named methods that a `calls` edge covers. Run on the current code:
+
+| Repository | Precision | Recall, all call sites | Recall, bare and `self.`/`this.` calls |
+| --- | --- | --- | --- |
+| Click | 100% (300 of 300) | 74% (131 of 177) | 98% (100 of 102) |
+| Express | 100% (55 of 55) | 18% (36 of 202) | 55% (36 of 66) |
+
+Precision is high in both. Recall is the weak side, and it depends on the language: Click's calls are mostly bare or through `self`, which the extractor resolves; Express passes `req` and `res` around untyped, so a call such as `res.send(...)` in an example file has no receiver type and no edge, and top-level calls such as `defineGetter(req, 'path', ...)` are not recorded. The audit found and led to the fixes for `var f = require('./x').f` bindings and for a second call to the same function inside one caller (edges are kept once per caller and callee, so the audit counts a site as covered when its calling function has an edge). Names shared with the standard library, such as `read` or `update`, can inflate the miss count; the printed examples show which kind each miss is.
 
 ## Labels and stale notes
 

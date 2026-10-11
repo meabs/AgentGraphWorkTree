@@ -1,7 +1,7 @@
 # Agent Graph Work Tree
 
 [![CI](https://github.com/meabs/AgentGraphWorkTree/actions/workflows/test.yml/badge.svg)](https://github.com/meabs/AgentGraphWorkTree/actions/workflows/test.yml)
-![version](https://img.shields.io/badge/version-0.3.5-blue)
+![version](https://img.shields.io/badge/version-0.3.6-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 
@@ -166,6 +166,7 @@ You can also run the launcher by hand (`~/.local/share/agent-graph/bin/kgen`, or
 kgen sync   --repo .    # regenerate
 kgen check  --repo .    # exit 1 and list stale or new files if sources changed since the last sync
 kgen verify --repo .    # confirm each claim still matches its cited line
+kgen audit  --repo .    # spot-check call edges against the source text: precision, and a lower-bound recall
 ```
 
 `kg stale` shows agents which files changed since the graph was built.

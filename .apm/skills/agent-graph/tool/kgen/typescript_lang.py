@@ -314,8 +314,12 @@ class TsExtractor:
                         m.cjs_default = True
                         m.exports["default"] = ("local", name)
                     chain = chain.child_by_field_name("right")
+                prop_of = value.child_by_field_name("object") if value.type == "member_expression" else None
+                from_req = self.require_spec(prop_of) if prop_of is not None else None  # var f = require('./x').f
                 if req:
                     m.names[name] = ("require", req)
+                elif from_req:
+                    m.names[name] = ("requirefrom", from_req, text(value.child_by_field_name("property")))
                 elif chain is not None and (chain.type == "object" or (chain.type == "call_expression" and text(chain.child_by_field_name("function")) == "Object.create")):
                     m.objects.add(name)  # `var res = Object.create(proto)` is an object that later `res.x = function` lines extend
                 elif value.type in ("class", "class_expression"):

@@ -38,6 +38,8 @@ FILES = {
     "lib/app.js": "var app = exports = module.exports = {};\napp.init = function init() { this.boot(); };\napp.boot = function () { return 1; };\n",
     "lib/index.js": "const app = require('./app');\nfunction start() { app.init(); }\nfunction Old() {}\nOld.prototype.run = function () { return this.stop(); };\nOld.prototype.stop = function () {};\nmodule.exports = { start, Old };\n",
     "lib/res.js": "var proto = {};\nvar res = Object.create(proto);\nmodule.exports = res;\nres.send = function send(b) { return b; };\nres.json = function json(o) { return this.send(o); };\n",
+    "lib/utils.js": "exports.norm = function norm(x) { return x; };\n",
+    "lib/user.js": "var norm = require('./utils').norm;\nfunction run(k) { return norm(k); }\nmodule.exports = { run };\n",
     "dist/bundle.js": "function x(){}\n",
     "types.d.ts": "declare const y: number;\n",
 }
@@ -155,3 +157,18 @@ def test_object_create_exports_get_methods_and_callers_follow_depth(tmp_path: Pa
     assert ("method:lib.res.res#json", "method:lib.res.res#send", "medium") in edges(repo, "calls")
     out = subprocess.run([sys.executable, str(repo / gen.OUT / "kg.py"), "callers", "method:lib.res.res#send", "--depth", "2"], capture_output=True, text=True).stdout
     assert "d=1" in out and "res#json" in out
+
+
+def test_require_then_property_binds_the_imported_function(tmp_path: Path):
+    repo = build(tmp_path)
+    assert ("method:lib.user#run", "method:lib.utils#norm", "medium") in edges(repo, "calls")
+
+
+def test_audit_reports_precision_and_recall_against_the_text(tmp_path: Path):
+    from kgen import audit
+
+    r = audit.audit(build(tmp_path), sample=50)
+    assert r["edges_wrong"] == 0 and r["edges_sampled"] > 0
+    assert r["sites"] >= r["sites_covered"] > 0
+    text = audit.report(r)
+    assert text.startswith("precision: 100.0%") and "recall (lower bound)" in text
