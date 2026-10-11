@@ -44,6 +44,7 @@ Controlled comparisons, Claude Code and Codex, answer keys built independently o
 | Large repos | Celery (443 files), NestJS (2,012 files) | 6 lookups | 48 | 48 / 48 | Claude Code 91k vs 83k; Codex 98k vs 84k |
 | Multi-hop | Celery, NestJS | 6 hierarchy and call-chain | 72 | 72 / 72 | Claude Code 84k (0.3.3 instructions) vs 81k plain; Codex 136k vs 107k |
 | `kg subclasses` | Celery, NestJS | same 6 | 24 | 24 / 24 | Hierarchy questions: Codex 90k vs 106k plain; Claude Code 82k vs 79k |
+| `kg callers --depth` (0.3.5) | Click, Express | 3 | 36 | Codex 5/6 graph vs 4/6 plain, Cursor 6/6 vs 4/6, Copilot 6/6 vs 6/6 | Callers of callers: Codex 84k vs 196k, Cursor 121k vs 414k, Copilot 161k vs 181k. Simple lookups: level or up to 80% dearer with the graph |
 
 Findings:
 
@@ -52,7 +53,8 @@ Findings:
 - The graph did not reduce tokens overall. Agents run `kg` and then, as the instructions suggest for `[medium]` results, check it with `grep`.
 - A "trust `kg`, do not repeat it with `grep`" wording was tried (72-run comparison above) and was worse than the original on Claude Code (102k against 84k), so it was not kept.
 - `kg subclasses` cut Codex's tokens by 16% against plain on hierarchy questions (and by 33% against the earlier instructions). It did not help Claude Code. The NestJS hierarchy questions were cheaper with the graph (84k against 114k; 80k against 94k); the Celery ones were level.
-- Questions that are not about hierarchy, such as callers of callers, cost more with the graph (164k against 101k).
+- Callers of callers cost more with the graph (164k against 101k) until `kg callers --depth N` existed. With it, the 0.3.5 run (2 runs per cell, Codex, Cursor and Copilot) was cheaper with the graph on that question for all three agents (relative cost 0.43, 0.29 and 0.89, all provisional), while one-hop lookups were level or dearer (for example Express `res.send`: Cursor 95k against 52k). Per-agent verdicts over all three questions were "no clear difference" with 6 runs per arm.
+- That run also exposed a miss: Express builds `res` with `Object.create(...)`, which the JavaScript extractor skipped, so `kg callers` on `res.send` returned nothing. Fixed in 0.3.5 and covered by a test. The graph still misses calls through values of unknown type, such as `Group.invoke` reaching `cmd.make_context`.
 - With two to four runs per cell and large run-to-run spread, differences under roughly 20% are noise.
 
 ### Defects the runs exposed
@@ -76,7 +78,7 @@ One question per agent, run non-interactively on a fresh clone with the installe
 | Codex | codex-cli 0.157.0 | used `kg`, correct | used `kg`, correct | used `kg`, correct |
 | GitHub Copilot CLI | 1.0.95 | used `kg`, correct | `kg --help`, then `grep`, correct | `kg --help`, then `grep`, correct |
 
-The Petclinic question was "which HTTP routes does `OwnerController` handle, and which repository methods does it call?" (7 routes and 3 repository methods). This shows the instruction files are picked up by Claude Code (through `CLAUDE.md`), Codex (`AGENTS.md`), Cursor (the rule file) and the Copilot CLI (`.github/copilot-instructions.md`). These are one-run checks and say nothing about cost. Codex needs `< /dev/null` in non-interactive runs, otherwise it waits for stdin. Cursor and Copilot were not re-run after the instruction block gained its command list.
+The Petclinic question was "which HTTP routes does `OwnerController` handle, and which repository methods does it call?" (7 routes and 3 repository methods). This shows the instruction files are picked up by Claude Code (through `CLAUDE.md`), Codex (`AGENTS.md`), Cursor (the rule file) and the Copilot CLI (`.github/copilot-instructions.md`). These are one-run checks and say nothing about cost. Codex needs `< /dev/null` in non-interactive runs, otherwise it waits for stdin. Cursor and Copilot were re-run with the current instruction block in the 0.3.5 trial above: both used `kg` in 12 of 12 graph runs.
 
 ## Alternatives tried
 
