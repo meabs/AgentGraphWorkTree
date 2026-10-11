@@ -1,7 +1,7 @@
 # Agent Graph Work Tree
 
 [![CI](https://github.com/meabs/AgentGraphWorkTree/actions/workflows/test.yml/badge.svg)](https://github.com/meabs/AgentGraphWorkTree/actions/workflows/test.yml)
-![version](https://img.shields.io/badge/version-0.3.4-blue)
+![version](https://img.shields.io/badge/version-0.3.5-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 
@@ -73,7 +73,7 @@ Agents call `kg`, a small command that needs only the Python standard library. O
 
 ```sh
 .agent-knowledge/bin/kg show <Type>                    # what a type is, with sources
-.agent-knowledge/bin/kg callers <method>               # who calls a method
+.agent-knowledge/bin/kg callers <method> [--depth N]    # who calls a method, then their callers
 .agent-knowledge/bin/kg dependents <Type>              # who uses, extends or implements it
 .agent-knowledge/bin/kg subclasses <Type>              # every subclass at any depth
 .agent-knowledge/bin/kg subclasses <Type> --overrides <method>

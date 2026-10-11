@@ -343,7 +343,7 @@ def render_all(claims: list[Claim], graph: dict, manifest: dict, mode: str = "co
     sk = Doc("skills/use-generated-knowledge/SKILL.md", "skill", "use-generated-knowledge", "")
     cmds = """## Commands (`.agent-knowledge/bin/kg`)
 - `kg show <Class|Class#method|route>`: what it is, where it is, everything it connects to.
-- `kg callers <Class#method>` and `kg dependents <Class>`: who uses it.
+- `kg callers <Class#method>` (add `--depth 2` for callers of callers) and `kg dependents <Class>`: who uses it.
 - `kg subclasses <Class> [--overrides method]`: every subclass or implementer at any depth.
 - `kg impact <Class>`: transitive users, routes, templates and tests to re-check after a change.
 - `kg routes [text]`, `kg entity <Name>`, `kg tests <Class>`, `kg path <A> <B>`, `kg find <text>`.

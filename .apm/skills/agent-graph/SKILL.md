@@ -13,7 +13,7 @@ description: Use the generated code graph and notes in .agent-knowledge/ to answ
 .agent-knowledge/bin/kg show <Type>        # what a type is, with sources
 .agent-knowledge/bin/kg impact <Type>      # what depends on it, for scoping a change
 .agent-knowledge/bin/kg subclasses <Type> [--overrides method]   # every subclass/implementer at any depth
-.agent-knowledge/bin/kg callers <method>   # who calls a method
+.agent-knowledge/bin/kg callers <method>   # who calls a method (--depth N: callers of callers)
 .agent-knowledge/bin/kg routes             # HTTP routes and their handlers
 .agent-knowledge/bin/kg tests <Type>       # tests linked to a type
 ```

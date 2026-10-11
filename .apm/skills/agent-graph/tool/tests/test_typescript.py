@@ -37,6 +37,7 @@ FILES = {
     "src/ui/Button.test.tsx": "import { Button } from './Button';\n\ntest('renders', () => { Button; });\nit('x', () => {});\n",
     "lib/app.js": "var app = exports = module.exports = {};\napp.init = function init() { this.boot(); };\napp.boot = function () { return 1; };\n",
     "lib/index.js": "const app = require('./app');\nfunction start() { app.init(); }\nfunction Old() {}\nOld.prototype.run = function () { return this.stop(); };\nOld.prototype.stop = function () {};\nmodule.exports = { start, Old };\n",
+    "lib/res.js": "var proto = {};\nvar res = Object.create(proto);\nmodule.exports = res;\nres.send = function send(b) { return b; };\nres.json = function json(o) { return this.send(o); };\n",
     "dist/bundle.js": "function x(){}\n",
     "types.d.ts": "declare const y: number;\n",
 }
@@ -147,3 +148,10 @@ def test_class_expression_in_a_static_field_is_collected(tmp_path: Path):
     subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
     gen.generate(repo)
     assert ("method:src.b.B.Proxy#run", "method:src.u#strip", "medium") in edges(repo, "calls")
+
+
+def test_object_create_exports_get_methods_and_callers_follow_depth(tmp_path: Path):
+    repo = build(tmp_path)
+    assert ("method:lib.res.res#json", "method:lib.res.res#send", "medium") in edges(repo, "calls")
+    out = subprocess.run([sys.executable, str(repo / gen.OUT / "kg.py"), "callers", "method:lib.res.res#send", "--depth", "2"], capture_output=True, text=True).stdout
+    assert "d=1" in out and "res#json" in out

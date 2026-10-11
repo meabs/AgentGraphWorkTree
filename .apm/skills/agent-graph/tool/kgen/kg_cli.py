@@ -123,7 +123,25 @@ def cmd_dependents(args):
 
 
 def cmd_callers(args):
-    edges_to(args, {"calls"}, True)
+    if args.depth <= 1:
+        return edges_to(args, {"calls"}, True)
+    g, nodes, out, inc = load()
+    start = pick(nodes, args.name)
+    seen = {start}
+    q = deque([(start, 0)])
+    n = 0
+    while q:
+        cur, d = q.popleft()
+        if d >= args.depth:
+            continue
+        for e in sorted(inc[cur], key=lambda x: x["from"]):
+            if e["predicate"] != "calls" or not keep(e, args) or e["from"] in seen:
+                continue
+            seen.add(e["from"])
+            q.append((e["from"], d + 1))
+            n += 1
+            print(f"  d={d + 1} {tg(e['confidence'])}{e['from']} -> {cur}  {loc(e)}")
+    print(f"{n} callers within {args.depth} levels" if n else "no callers (in the graph)")
 
 
 TEST_PATH = re.compile(r"(^|/)(tests?|__tests__|spec|specs|testing)(/|$)|\.(test|spec)\.[a-z]+$|(^|/)test_[^/]*\.py$|_test\.py$|(^|/)t/")
@@ -316,6 +334,8 @@ def main(argv=None):
             s.add_argument("text", nargs="?")
         if name == "impact":
             s.add_argument("--depth", type=int, default=4)
+        if name == "callers":
+            s.add_argument("--depth", type=int, default=1, help="follow callers of callers this many levels")
         if name == "subclasses":
             s.add_argument("--overrides", metavar="METHOD", help="only subclasses that define this method")
             s.add_argument("--include-tests", action="store_true", help="also list classes in test files")

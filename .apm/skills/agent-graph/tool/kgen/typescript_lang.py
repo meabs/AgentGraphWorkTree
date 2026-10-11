@@ -316,8 +316,8 @@ class TsExtractor:
                     chain = chain.child_by_field_name("right")
                 if req:
                     m.names[name] = ("require", req)
-                elif chain is not None and chain.type == "object":
-                    m.objects.add(name)
+                elif chain is not None and (chain.type == "object" or (chain.type == "call_expression" and text(chain.child_by_field_name("function")) == "Object.create")):
+                    m.objects.add(name)  # `var res = Object.create(proto)` is an object that later `res.x = function` lines extend
                 elif value.type in ("class", "class_expression"):
                     self.define_class(m, value, "class", name, [])
                 else:
