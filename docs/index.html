@@ -131,7 +131,15 @@ route:GET /owners/{ownerId}  -&gt; …owner.OwnerController#showOwner  view=owne
   d=2 [high] celery.backends.consul.ConsulBackend (extends KeyValueStoreBackend)  celery/backends/consul.py:27
   …
 16 subclasses</pre>
-<div class="cmd"><span class="p">$</span> kg callers iter_params_for_processing</div><pre class="res">  [medium] calls method:click.core.Command#parse_args  src/click/core.py:1399</pre></div></section><section class="panel" id="p-typescript" role="tabpanel" hidden>
+<div class="cmd"><span class="p">$</span> kg callers iter_params_for_processing</div><pre class="res">  [medium] calls method:click.core.Command#parse_args  src/click/core.py:1399</pre>
+<div class="cmd"><span class="p">$</span> kg callers iter_params_for_processing --depth 3</div><pre class="res">  d=1 [medium] method:click.core.Command#parse_args -&gt; method:click.core#iter_params_for_processing  src/click/core.py:1403
+  d=1 [medium] method:test_commands#test_iter_params_for_processing -&gt; method:click.core#iter_params_for_processing  tests/test_commands.py:417
+  d=2 [medium] method:click.core.Command#make_context -&gt; method:click.core.Command#parse_args  src/click/core.py:1393
+  d=2 [medium] method:click.core.Group#parse_args -&gt; method:click.core.Command#parse_args  src/click/core.py:2042
+  d=3 [medium] method:click.core.Command#main -&gt; method:click.core.Command#make_context  src/click/core.py:1591
+  d=3 [medium] method:click.shell_completion#_resolve_context -&gt; method:click.core.Command#make_context  src/click/shell_completion.py:711
+  d=3 [medium] method:click.core.Group#resolve_command -&gt; method:click.core.Group#parse_args  src/click/core.py:2142
+7 callers within 3 levels</div></section><section class="panel" id="p-typescript" role="tabpanel" hidden>
 <p class="lede">Callers of a function across React pages and Next.js route files. Dashed edges are <code>[medium]</code>: resolved by a rule, so check the cited line.</p>
 <figure><img src="img/callers-typescript.svg" alt="TypeScript example diagram generated from the real graph" loading="lazy"><figcaption>Diagram drawn from the real <code>graph.json</code> of Next.js and NestJS.</figcaption></figure>
 <div class="term" role="group" aria-label="TypeScript terminal output"><div class="cmd"><span class="p">$</span> kg callers getI18nPath</div><pre class="res">  [medium] calls method:src.app.[locale].(auth).(center).sign-in.[[...sign-in]].page.SignInPage#render  src/app/[locale]/(auth)/(center)/sign-in/[[...sign-in]]/page.tsx:27
@@ -193,10 +201,11 @@ route:GET /owners/{ownerId}  -&gt; …owner.OwnerController#showOwner  view=owne
 <thead><tr><th>Question</th><th>Result</th></tr></thead>
 <tbody>
 <tr><td>Are the facts correct?</td><td>Java: 13,380 of 13,380 high and 8,947 of 8,957 medium call links match bytecode. Python: 87% of call edges whose caller ran were seen at runtime. TypeScript: 32 of 32 sampled edges correct.</td></tr>
-<tr><td>Do agents use it?</td><td>Yes. Claude Code, Codex, Cursor and the Copilot CLI all found and used <code>kg</code> from the generated instructions. 192 controlled runs gave correct answers in every arm.</td></tr>
-<tr><td>Does it save tokens?</td><td>On a large Java repository, yes: Codex used 398k tokens against 953k. On Python and TypeScript it did not reduce tokens overall; <code>kg subclasses</code> helped Codex on hierarchy questions (-16%) and did not help Claude Code.</td></tr>
+<tr><td>Do agents use it?</td><td>Yes. Claude Code, Codex, Cursor and the Copilot CLI all found and used <code>kg</code> from the generated instructions. 192 controlled runs gave correct answers in every arm, and a later 36-run trial added Cursor and Copilot.</td></tr>
+<tr><td>Does it save tokens?</td><td>It depends on the question and the agent. On a large Java repository, yes: Codex used 398k tokens against 953k. On Python and TypeScript, one-hop lookups cost the same or more. On a multi-level question (callers up to three levels away, with <code>kg callers --depth 3</code>), 8 runs per arm on Click: Codex 95k tokens against 255k (0.37x), Cursor 122k against 358k (0.34x), Copilot 178k against 158k (no gain). <code>kgen route</code> turns such results into per-agent advice.</td></tr>
+<tr><td>How accurate is a repository's graph?</td><td><code>kgen audit</code> checks any repository against its own source text. Click: every sampled call edge is real, and 98% of bare and <code>self.</code> calls have an edge. Express: every sampled edge is real, but only 55% of bare and <code>this.</code> calls have one, and calls through untyped values such as <code>res.send(...)</code> in example code are missed.</td></tr>
 </tbody></table></div>
-<div class="honest">Small samples (two to four runs per cell), two agents and a handful of repositories. Read differences under about 20% as noise. Method, data and threats to validity are in the <a href="EVALUATION.html">full evaluation</a>.</div>
+<div class="honest">Small samples (two to eight runs per cell), three or four agents and a handful of repositories. Read differences under about 20% as noise. Method, data and threats to validity are in the <a href="EVALUATION.html">full evaluation</a>.</div>
 </div></section>
 </main>
 
