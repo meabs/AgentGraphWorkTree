@@ -85,6 +85,25 @@ def cmd_route(a):
     return 0
 
 
+def cmd_okf(a):
+    from kgen import okf
+
+    ov = {"unit": a.unit, "meta": a.meta, "index": a.index, "stale_after_days": a.stale_after_days, "max_items": a.max_items,
+          "line_tags": True if a.line_tags else None, "banner": True if a.banner else None, "attest": True if a.attest else None,
+          "links": False if a.no_links else None, "calls": "none" if a.no_calls else a.calls, "cite": False if a.no_cite else None,
+          "references": tuple(tuple(x.split("=", 1)) for x in a.reference) if a.reference else None}
+    if a.stale_against:
+        cur = gen.source_files(Path(a.stale_against).resolve())
+        known = json.loads((Path(a.repo).resolve() / gen.OUT / "manifest.json").read_text(encoding="utf-8"))["sources"]
+        ov["stale_files"] = tuple(sorted(p for p, h in known.items() if p not in cur or sha256_file(cur[p]) != h))
+    cfg = okf.from_args(a.preset, ov)
+    n = okf.write(Path(a.repo).resolve(), Path(a.out).resolve(), cfg)
+    if a.pointer:
+        Path(a.pointer).write_text(okf.pointer(cfg), encoding="utf-8")
+    print(f"wrote {n} OKF concept files to {a.out} (preset {a.preset})")
+    return 0
+
+
 def main():
     p = argparse.ArgumentParser(prog="kgen")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -103,6 +122,26 @@ def main():
             s.add_argument("--components", choices=("docs", "graph", "both"), default="both")
             s.add_argument("--extra-claims", help="JSONL of model-inferred claims (tier low)")
         s.set_defaults(fn=fn)
+    o = sub.add_parser("okf", help="emit an Open Knowledge Format v0.2 bundle from a synced repo's claims")
+    o.add_argument("--repo", required=True, help="a repo already synced with `kgen sync`")
+    o.add_argument("--out", required=True, help="bundle directory to write")
+    o.add_argument("--preset", choices=("minimal", "lean", "default", "recommended", "tagged", "guarded"), default="recommended")
+    o.add_argument("--unit", choices=("module", "package"))
+    o.add_argument("--meta", choices=("minimal", "native"))
+    o.add_argument("--index", choices=("none", "flat", "routing"))
+    o.add_argument("--stale-after-days", type=int)
+    o.add_argument("--max-items", type=int)
+    o.add_argument("--line-tags", action="store_true")
+    o.add_argument("--banner", action="store_true")
+    o.add_argument("--attest", action="store_true")
+    o.add_argument("--no-links", action="store_true")
+    o.add_argument("--no-calls", action="store_true")
+    o.add_argument("--calls", choices=("none", "cross", "all"))
+    o.add_argument("--no-cite", action="store_true")
+    o.add_argument("--stale-against", metavar="REPO", help="mark concepts whose source differs in this checkout as stale (stale_after in the past)")
+    o.add_argument("--pointer", metavar="FILE", help="also write the AGENTS.md text that goes with the bundle")
+    o.add_argument("--reference", action="append", metavar="NAME=PATH", help="mirror another bundle under references/NAME/")
+    o.set_defaults(fn=cmd_okf)
     r = sub.add_parser("route", help="per-agent advice on when to use kg, from AgentTrialRig results")
     r.add_argument("results", help="a trialrig results folder with a plain arm and a graph arm")
     r.add_argument("--trial", help="the trial's TOML, so questions are typed by their prompt (default: by id)")
