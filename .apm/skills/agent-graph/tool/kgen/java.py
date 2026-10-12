@@ -54,6 +54,13 @@ class Ann:
     def strings(self) -> list[str]:
         return STR.findall(self.args)
 
+    def paths(self) -> list[str]:
+        """The path literals of a mapping annotation: `value`, `path`, or a leading positional string. Not `produces`, `consumes`, `headers` or `params`."""
+        for key in ("value", "path"):
+            if key in self.pairs:
+                return STR.findall(self.pairs[key])
+        return STR.findall(re.split(r"\b\w+\s*=", self.args, maxsplit=1)[0])
+
 
 def annotations(node) -> list[Ann]:
     out: list[Ann] = []
@@ -269,7 +276,7 @@ class JavaExtractor:
         prefixes = [""]
         for a in ti.anns:
             if a.name in ("RequestMapping", "Path"):
-                prefixes = a.strings() or [""]
+                prefixes = a.paths() or [""]
         depends: dict[str, set] = {}
         for m in body.children:
             if m.type == "constructor_declaration":
@@ -350,7 +357,7 @@ class JavaExtractor:
                 if a.name in MAPPINGS:
                     self.route(ti, mid, m, a, prefixes, body, consts)
         elif "rest-client" not in class_stereos and any(a.name in JAXRS for a in anns):
-            sub = next((x.strings() for x in anns if x.name == "Path"), None) or [""]
+            sub = next((x.paths() for x in anns if x.name == "Path"), None) or [""]
             direct = any(x.name == "Path" for x in ti.anns) and ti.kind != "interface"
             conf = HIGH if direct else MEDIUM
             basis = "@%s on method of a @Path resource class" if direct else "@%s on method of a class without its own @Path or of an interface; path is relative to wherever this resource is mounted (locator method, or client proxy interface)"
@@ -449,7 +456,7 @@ class JavaExtractor:
         if a.name == "RequestMapping":
             mm = re.search(r"RequestMethod\.(\w+)", a.args)
             http = mm.group(1) if mm else "ANY"
-        paths = a.strings() or [""]
+        paths = a.paths() or [""]
         for pre in prefixes:
             for p in paths:
                 full = "/" + "/".join(x for x in (pre.strip("/"), p.strip("/")) if x)

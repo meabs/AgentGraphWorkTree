@@ -285,3 +285,20 @@ def test_openapi_file_routes_link_to_methods_by_operation_id(repo):
     assert defs == ["route:DELETE /api/things/{id}", "route:GET /api/things", "route:POST /api/things"]
     linked = {c["subject"]: c["object"] for c in cs if c["predicate"] == "handled_by" and c["extractor"] == "openapi"}
     assert linked == {"route:GET /api/things": "method:s.ThingResource#listThings", "route:POST /api/things": "method:s.ThingResource#addThing"}
+
+
+def test_route_paths_come_from_value_and_path_not_from_produces_or_consumes(tmp_path):
+    repo = tmp_path / "r"
+    d = repo / BASE
+    d.mkdir(parents=True)
+    (d / "Api.java").write_text(
+        "package demo;\n\n@RestController\n@RequestMapping(value = \"/api\", produces = {\"application/json\"})\nclass Api {\n"
+        "\t@RequestMapping(value = \"/login\", method = RequestMethod.POST, produces = {\"application/json\"})\n\tString login() { return \"\"; }\n"
+        "\t@GetMapping(path = \"/y\", produces = \"text/plain\")\n\tString y() { return \"\"; }\n"
+        "\t@GetMapping(\"/x\")\n\tString x() { return \"\"; }\n"
+        "\t@PostMapping(consumes = \"application/json\")\n\tString root() { return \"\"; }\n}\n", encoding="utf-8")
+    git(tmp_path, "init", "-q", str(repo))
+    git(repo, "add", ".")
+    gen.generate(repo)
+    routes = sorted(c["subject"] for c in claims(repo) if c["predicate"] == "handled_by")
+    assert routes == ["route:GET /api/x", "route:GET /api/y", "route:POST /api", "route:POST /api/login"], routes

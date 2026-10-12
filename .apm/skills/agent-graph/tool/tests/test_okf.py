@@ -113,3 +113,19 @@ def test_last_modified_is_the_files_own_time(tmp_path: Path):
     files = okf.render(claims, manifest, okf.Config(file_times=(("pkg/store.py", "2020-01-02T03:04:05+00:00"),)))
     assert 'last_modified: "2020-01-02T03:04:05+00:00"' in files["modules/pkg.store.md"]
     assert 'last_modified: "2020-01-02T03:04:05+00:00"' not in files["modules/pkg.service.md"]
+
+
+def test_routes_become_one_concept_and_java_packages_are_concepts(tmp_path: Path):
+    repo = tmp_path / "j"
+    src = repo / "src/main/java/com/acme/web"
+    src.mkdir(parents=True)
+    (src / "ItemController.java").write_text('package com.acme.web;\nimport org.springframework.web.bind.annotation.*;\n@RestController\n@RequestMapping("/api/v1")\npublic class ItemController {\n  @GetMapping("/items/{id}")\n  public String get(String id) { return helper(id); }\n  private String helper(String id) { return id; }\n  private String name;\n  public String getName() { return "x"; }\n}\n', encoding="utf-8")
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+    gen.generate(repo)
+    claims, manifest = okf.load(repo)
+    files = okf.render(claims, manifest, okf.Config())
+    assert "modules/com.acme.web.md" in files and "routes.md" in files
+    assert "/api/v1/items/{id}" in files["routes.md"] and "ItemController.get" in files["routes.md"]
+    assert "`ItemController.name: String`" in files["modules/com.acme.web.md"]
+    assert "ItemController.get(" in files["modules/com.acme.web.md"] and "[HTTP routes](/routes.md)" in files["index.md"]

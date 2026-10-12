@@ -72,6 +72,7 @@ def q(v) -> str:
     return json.dumps(v, ensure_ascii=False)
 
 
+ACCESSOR = re.compile(r"^(get|set|is)[A-Z]")  # Java accessors
 RESERVED = {"index", "log"}  # index.md and log.md mean something at any level (SPEC section 3.1), so a module of that name cannot be a concept file
 
 
@@ -104,11 +105,18 @@ def render(claims: list[dict], manifest: dict, cfg: Config = Config()) -> dict[s
         by[c["predicate"]].append(c)
     kinds = {c["subject"]: c for c in by["is_a"]}
     own = {t: c for t, c in kinds.items() if c["object"] == "module"}  # one concept per module
+    java = not own  # no modules (Java): every type is its own file-level unit and concepts are packages
+    if java:
+        own = dict(kinds)
+        cfg = replace(cfg, unit="package")
     file_of = {t: c["source"]["file"] for t, c in own.items()}
-    is_test = lambda f: "/tests/" in "/" + f or f.rsplit("/", 1)[-1].startswith("test_") or ".test." in f or ".spec." in f
+    is_test = lambda f: "/tests/" in "/" + f or "/test/" in "/" + f or f.rsplit("/", 1)[-1].startswith("test_") or ".test." in f or ".spec." in f or f.endswith(("Test.java", "Tests.java", "IT.java"))
     module_of: dict[str, str] = {}   # any symbol id -> module type id
     for t, c in kinds.items():
         f = c["source"]["file"]
+        if t in own and (java or c["object"] == "module"):
+            module_of[t] = t
+            continue
         for m, mc in own.items():
             if file_of[m] == f:
                 module_of[t] = m
@@ -158,13 +166,19 @@ def render(claims: list[dict], manifest: dict, cfg: Config = Config()) -> dict[s
                 base = ", ".join(link(x["object"]) if x["object"] in unit_of else f"`{short(x['object'])}`" for x in ext)
                 body.append(f"- `{short(c['subject']).rsplit('.', 1)[-1]}` ({c['object']}){' extends ' + base if base else ''}{cite(c, cfg)}{tag(c, cfg)}")
                 used += [c] + ext
+        fields = [c for c in by["has_field"] if module_of.get(c["subject"], c["subject"]) in mset and c["attrs"].get("name") != "serialVersionUID"]
+        if fields:
+            body += ["", "## Fields"]
+            for c in sorted(fields, key=lambda c: (c["source"]["file"], c["source"]["line"]))[: cfg.max_items]:
+                body.append(f"- `{short(c['subject']).rsplit('.', 1)[-1]}.{c['attrs']['name']}: {c['attrs']['type']}`{cite(c, cfg)}{tag(c, cfg)}")
+                used.append(c)
         if funcs:
             body += ["", "## Functions and methods"]
             for c in funcs[: cfg.max_items]:
                 a = c["attrs"]
                 params = ", ".join(a.get("params") or [])
                 ret = f" -> {a['returns']}" if a.get("returns") else ""
-                owner = "" if c["subject"] in mset else short(c["subject"]).rsplit(".", 1)[-1] + "."
+                owner = "" if (c["subject"] in mset and not java) else short(c["subject"]).rsplit(".", 1)[-1] + "."
                 body.append(f"- `{owner}{a.get('name') or short(c['object']).split('#')[-1]}({params}){ret}`{cite(c, cfg)}{tag(c, cfg)}")
                 used.append(c)
         if routes:
@@ -188,18 +202,33 @@ def render(claims: list[dict], manifest: dict, cfg: Config = Config()) -> dict[s
                     if key not in seen:
                         seen.add(key)
                         calls.append(c)
+            if java:
+                calls = [c for c in calls if not ACCESSOR.match(c["object"].split("#")[-1])]  # getters and setters are noise at this scale
             if calls:
                 body += ["", "## Calls"]
-                for c in sorted(calls, key=lambda c: (c["subject"], c["object"]))[: cfg.max_items]:
+                rows = []
+                for c in sorted(calls, key=lambda c: (c["subject"], c["object"])):
                     callee = c["object"].split("#")
                     mb = module_of.get(callee[0].replace("method:", "type:"), callee[0].replace("method:", "type:"))
                     who = c["subject"].replace("method:", "").split("#")
-                    caller = (who[0].rsplit(".", 1)[-1] + "." if who[0] not in {short(t) for t in mset} else "") + who[-1]
+                    caller = (who[0].rsplit(".", 1)[-1] + "." if java or who[0] not in {short(t) for t in mset} else "") + who[-1]
                     owner_ = callee[0].replace("method:", "")
-                    target = (owner_.rsplit(".", 1)[-1] + "." if owner_ not in {short(t) for t in module_of if module_of[t] == mb and kinds.get(t, {}).get("object") == "module"} and owner_ not in {short(t) for t in mset} else "") + callee[-1]
-                    where = f"{link(mb)} " if unit_of[mb] != name else ""
-                    body.append(f"- `{caller}` calls {where}`{target}`{cite(c, cfg)}{tag(c, cfg)}")
-                    used.append(c)
+                    target = (owner_.rsplit(".", 1)[-1] + "." if java or owner_ not in {short(t) for t in module_of if module_of[t] == mb and kinds.get(t, {}).get("object") == "module"} and owner_ not in {short(t) for t in mset} else "") + callee[-1]
+                    rows.append((caller, mb, target, c))
+                if java:  # one line per caller and target concept: the callees are listed together, cited at the first call
+                    grouped: dict = {}
+                    for caller, mb, target, c in rows:
+                        grouped.setdefault((caller, mb), []).append((target, c))
+                    for (caller, mb), items in list(grouped.items())[: cfg.max_items]:
+                        names = ", ".join(f"`{t}`" for t in dict.fromkeys(t for t, _ in items))
+                        where = f"{link(mb)} " if unit_of[mb] != name else ""
+                        body.append(f"- `{caller}` calls {where}{names}{cite(items[0][1], cfg)}{tag(items[0][1], cfg)}")
+                        used += [c for _, c in items]
+                else:
+                    for caller, mb, target, c in rows[: cfg.max_items]:
+                        where = f"{link(mb)} " if unit_of[mb] != name else ""
+                        body.append(f"- `{caller}` calls {where}`{target}`{cite(c, cfg)}{tag(c, cfg)}")
+                        used.append(c)
         tests = sorted({short(s) for t in mset for s in tests_of.get(t, [])})
         if tests:
             body += ["", "## Tests", *[f"- `{t}`" for t in tests]]
@@ -225,6 +254,32 @@ def render(claims: list[dict], manifest: dict, cfg: Config = Config()) -> dict[s
         if cfg.line_tags:
             banner += "> `[high]` is stated directly in the source; `[medium]` is a deterministic inference.\n\n"
         out[mod_path(name).lstrip("/")] = "\n".join(fm) + "\n\n" + banner + "\n".join(body).rstrip() + "\n"
+    routes = sorted(by["handled_by"], key=lambda c: (c["attrs"]["path"], c["attrs"]["http"]))
+    routes = [c for c in routes if not is_test(c["source"]["file"])]
+    if routes:  # the HTTP surface as one concept: what another repository needs to call this one
+        body = ["# HTTP routes", "", f"{len(routes)} routes. Each line is `METHOD path`, the handler method, and where it is declared.", "", "| Method | Path | Handler | Source |", "|---|---|---|---|"]
+        used = []
+        for c in routes:
+            t = c["object"].split("#")[0].replace("method:", "type:")
+            handler = f"{short(t).rsplit('.', 1)[-1]}.{c['object'].split('#')[-1]}"
+            mb = module_of.get(t, t)
+            target = link(mb) if mb in unit_of else f"`{handler}`"
+            body.append(f"| {c['attrs']['http']} | `{c['attrs']['path']}` | {target} `{handler}` | `{c['source']['file']}:{c['source']['line']}`{tag(c, cfg)} |")
+            used.append(c)
+        files = sorted({c["source"]["file"] for c in routes})
+        desc = f"All {len(routes)} HTTP routes with their handlers"
+        fm = ["---", "type: HTTP API", 'title: "HTTP routes"', f"description: {q(desc)}"]
+        if cfg.meta == "native":
+            fm += [f"tags: {q(['generated', 'api'])}", "generated:", f"  by: {q(gen_by)}", f"  at: {q(commit_time or '1970-01-01T00:00:00Z')}", "sources:"]
+            for f in files:
+                fm += [f"  - resource: {q(src_ref(f, cfg))}", f"    sha256: {q(manifest.get('sources', {}).get(f, ''))}", f"    last_modified: {q(dict(cfg.file_times).get(f) or commit_time or '1970-01-01T00:00:00Z')}"]
+            fm.append("status: stable")
+            if stale:
+                fm.append(f"stale_after: {q(stale)}")
+            elif set(files) & set(cfg.stale_files):
+                fm.append(f"stale_after: {q(commit_time)}")
+        fm.append("---")
+        out["routes.md"] = "\n".join(fm) + "\n\n" + "\n".join(body).rstrip() + "\n"
     for ref, path in cfg.references:
         for p in sorted(Path(path).rglob("*.md")):
             rel = p.relative_to(path).as_posix()
@@ -240,6 +295,8 @@ def render(claims: list[dict], manifest: dict, cfg: Config = Config()) -> dict[s
         lines = [f"# {manifest.get('name', 'Repository')} knowledge", ""]
         if cfg.index == "routing":
             lines += ["Start here. Open the module that matches your task; each lists its types, functions, routes and what it depends on.", ""]
+        if "routes.md" in out:
+            lines += ["## API", f"- [HTTP routes](/routes.md)" + (" - every route with its handler" if cfg.index == "routing" else ""), "", "## Modules" if not java else "## Packages"]
         for name in sorted(units):
             lines.append(f"- [{name}]({mod_path(name)})" + (f" - {summaries[name].split(': ', 1)[1]}" if cfg.index == "routing" else ""))
         if cfg.references:
