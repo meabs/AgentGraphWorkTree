@@ -33,6 +33,7 @@ class Config:
     attest: bool = False        # add `verified` with a process actor for concepts whose claims are all high confidence
     max_items: int = 400        # cap on types, functions and edges listed per concept
     source_url: str = ""        # template with {path}, e.g. https://github.com/o/r/blob/<commit>/{path}; empty gives a path relative to a bundle at <repo>/okf/
+    generated_at: str = ""      # generated.at; defaults to the newest change among the cited source files, so committing the guide itself does not change it
     file_times: tuple = ()      # ((path, ISO 8601 time the file last changed), ...) for sources[].last_modified; falls back to the commit time
     stale_files: tuple = ()     # source paths known to have changed since generation; their concepts get a past stale_after
     references: tuple = field(default_factory=tuple)  # extra bundles to mirror under references/: ((name, path), ...)
@@ -125,6 +126,7 @@ def render(claims: list[dict], manifest: dict, cfg: Config = Config()) -> dict[s
     for c in by["has_method"]:
         module_of.setdefault(c["object"], module_of.get(c["subject"], c["subject"]))
     commit_time = manifest.get("source_commit_time") or ""
+    gen_at = cfg.generated_at or commit_time
     commit = (manifest.get("source_commit") or "unknown")[:12]
     gen_by = f"kgen/{VERSION}"
     stale = ""
@@ -239,9 +241,9 @@ def render(claims: list[dict], manifest: dict, cfg: Config = Config()) -> dict[s
         fm = ["---", "type: Code Module", f"title: {q(name)}", f"description: {q(desc)}"]
         if cfg.meta == "native":
             fm += [f"resource: {q(src_ref(files[0], cfg))}", f"tags: {q(['generated', 'code'])}"]
-            fm += ["generated:", f"  by: {q(gen_by)}", f"  at: {q(commit_time or '1970-01-01T00:00:00Z')}"]
+            fm += ["generated:", f"  by: {q(gen_by)}", f"  at: {q(gen_at or '1970-01-01T00:00:00Z')}"]
             if cfg.attest and all(c["confidence"] == "high" for c in used) and used:
-                fm += ["verified:", f"  - by: {q('process:kgen-extract')}", f"    at: {q(commit_time or '1970-01-01T00:00:00Z')}"]
+                fm += ["verified:", f"  - by: {q('process:kgen-extract')}", f"    at: {q(gen_at or '1970-01-01T00:00:00Z')}"]
             fm.append("sources:")
             for f in files:
                 fm += [f"  - resource: {q(src_ref(f, cfg))}", f"    sha256: {q(manifest.get('sources', {}).get(f, ''))}", f"    last_modified: {q(dict(cfg.file_times).get(f) or commit_time or '1970-01-01T00:00:00Z')}"]
@@ -271,7 +273,7 @@ def render(claims: list[dict], manifest: dict, cfg: Config = Config()) -> dict[s
         desc = f"All {len(routes)} HTTP routes with their handlers"
         fm = ["---", "type: HTTP API", 'title: "HTTP routes"', f"description: {q(desc)}"]
         if cfg.meta == "native":
-            fm += [f"tags: {q(['generated', 'api'])}", "generated:", f"  by: {q(gen_by)}", f"  at: {q(commit_time or '1970-01-01T00:00:00Z')}", "sources:"]
+            fm += [f"tags: {q(['generated', 'api'])}", "generated:", f"  by: {q(gen_by)}", f"  at: {q(gen_at or '1970-01-01T00:00:00Z')}", "sources:"]
             for f in files:
                 fm += [f"  - resource: {q(src_ref(f, cfg))}", f"    sha256: {q(manifest.get('sources', {}).get(f, ''))}", f"    last_modified: {q(dict(cfg.file_times).get(f) or commit_time or '1970-01-01T00:00:00Z')}"]
             fm.append("status: stable")
@@ -323,7 +325,8 @@ def write(repo: Path, dest: Path, cfg: Config) -> int:
             r = subprocess.run(["git", "-C", str(repo), "log", "-1", "--format=%cI", "--", path], text=True, capture_output=True)
             if r.returncode == 0 and r.stdout.strip():
                 times.append((path, r.stdout.strip()))
-        cfg = replace(cfg, file_times=tuple(times))
+        newest = max(times, key=lambda t: datetime.fromisoformat(t[1]), default=None)
+        cfg = replace(cfg, file_times=tuple(times), generated_at=cfg.generated_at or (newest[1] if newest else ""))
     if not cfg.source_url:
         cfg = replace(cfg, source_url=remote_url_template(repo, manifest.get("source_commit") or ""))
     files = render(claims, manifest, cfg)

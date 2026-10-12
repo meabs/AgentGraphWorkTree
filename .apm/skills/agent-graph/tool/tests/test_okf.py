@@ -134,3 +134,24 @@ def test_routes_become_one_concept_and_java_packages_are_concepts(tmp_path: Path
 def test_pointer_asks_the_reader_to_say_when_it_relies_on_a_medium_entry_only_when_lines_are_tagged():
     assert "relies on one, say so" not in okf.pointer(okf.Config())
     assert "relies on one, say so" in okf.pointer(okf.Config(line_tags=True))
+
+
+def test_committing_the_guide_itself_does_not_change_it(tmp_path: Path):
+    repo = synced(tmp_path)
+    claims, manifest = okf.load(repo)
+    first = okf.write(repo, tmp_path / "g1", okf.Config())
+    (repo / "NOTES.md").write_text("not source\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(repo), "-c", "user.email=t@e", "-c", "user.name=t", "commit", "-qm", "docs only"], check=True)
+    gen.generate(repo)
+    okf.write(repo, tmp_path / "g2", okf.Config())
+    a = {p.relative_to(tmp_path / "g1").as_posix(): p.read_text(encoding="utf-8") for p in (tmp_path / "g1").rglob("*.md")}
+    b = {p.relative_to(tmp_path / "g2").as_posix(): p.read_text(encoding="utf-8") for p in (tmp_path / "g2").rglob("*.md")}
+    assert a == b and first == len(a), "a commit that touches no cited source file must not change the guide"
+
+
+def test_generated_at_is_the_newest_change_among_the_cited_files(tmp_path: Path):
+    repo = synced(tmp_path)
+    claims, manifest = okf.load(repo)
+    files = okf.render(claims, manifest, okf.Config(generated_at="2021-05-06T07:08:09+00:00", file_times=(("pkg/store.py", "2020-01-02T03:04:05+00:00"),)))
+    assert 'at: "2021-05-06T07:08:09+00:00"' in files["modules/pkg.store.md"]
