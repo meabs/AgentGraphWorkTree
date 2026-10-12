@@ -89,3 +89,27 @@ def test_recommended_preset_and_pointer_text():
     assert "read the source to confirm before you rely on it" in plain and "stale_after" not in plain and "references" not in plain
     full = okf.pointer(okf.Config(stale_files=("a.py",), references=(("x", "/p"),)))
     assert "stale_after" in full and "okf/references/" in full
+
+
+def test_resource_fields_are_urls_or_relative_paths_and_a_module_named_index_does_not_take_a_reserved_name(tmp_path: Path):
+    repo = synced(tmp_path)
+    (repo / "pkg" / "index.py").write_text("def f():\n    return 1\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+    gen.generate(repo)
+    claims, manifest = okf.load(repo)
+    files = okf.render(claims, manifest, okf.Config(source_url="https://example.com/o/r/blob/abc/{path}"))
+    text = files["modules/pkg.service.md"]
+    assert 'resource: "https://example.com/o/r/blob/abc/pkg/service.py"' in text and "repo:" not in text and "    id:" not in text and "sha256:" in text
+    rel = okf.render(claims, manifest, okf.Config())["modules/pkg.service.md"]
+    assert 'resource: "../../pkg/service.py"' in rel
+    assert "modules/pkg.index.md" in files and not any(p.endswith("/index.md") and p != "index.md" for p in files)
+    assert okf.mod_path("index") == "/modules/index-module.md" and okf.mod_path("log") == "/modules/log-module.md"
+
+
+
+def test_last_modified_is_the_files_own_time(tmp_path: Path):
+    repo = synced(tmp_path)
+    claims, manifest = okf.load(repo)
+    files = okf.render(claims, manifest, okf.Config(file_times=(("pkg/store.py", "2020-01-02T03:04:05+00:00"),)))
+    assert 'last_modified: "2020-01-02T03:04:05+00:00"' in files["modules/pkg.store.md"]
+    assert 'last_modified: "2020-01-02T03:04:05+00:00"' not in files["modules/pkg.service.md"]

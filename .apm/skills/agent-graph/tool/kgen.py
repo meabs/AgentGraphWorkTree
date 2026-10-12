@@ -90,7 +90,7 @@ def cmd_okf(a):
 
     ov = {"unit": a.unit, "meta": a.meta, "index": a.index, "stale_after_days": a.stale_after_days, "max_items": a.max_items,
           "line_tags": True if a.line_tags else None, "banner": True if a.banner else None, "attest": True if a.attest else None,
-          "links": False if a.no_links else None, "calls": "none" if a.no_calls else a.calls, "cite": False if a.no_cite else None,
+          "source_url": a.source_url, "links": False if a.no_links else None, "calls": "none" if a.no_calls else a.calls, "cite": False if a.no_cite else None,
           "references": tuple(tuple(x.split("=", 1)) for x in a.reference) if a.reference else None}
     if a.stale_against:
         cur = gen.source_files(Path(a.stale_against).resolve())
@@ -139,6 +139,7 @@ def main():
     o.add_argument("--calls", choices=("none", "cross", "all"))
     o.add_argument("--no-cite", action="store_true")
     o.add_argument("--stale-against", metavar="REPO", help="mark concepts whose source differs in this checkout as stale (stale_after in the past)")
+    o.add_argument("--source-url", help="template with {path} for the resource fields (default: the repo's origin on GitHub at the synced commit, else a relative path)")
     o.add_argument("--pointer", metavar="FILE", help="also write the AGENTS.md text that goes with the bundle")
     o.add_argument("--reference", action="append", metavar="NAME=PATH", help="mirror another bundle under references/NAME/")
     o.set_defaults(fn=cmd_okf)

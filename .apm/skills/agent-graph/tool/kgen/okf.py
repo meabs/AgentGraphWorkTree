@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from collections import defaultdict
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
@@ -31,6 +32,8 @@ class Config:
     cite: bool = True           # `path:line` after each line
     attest: bool = False        # add `verified` with a process actor for concepts whose claims are all high confidence
     max_items: int = 400        # cap on types, functions and edges listed per concept
+    source_url: str = ""        # template with {path}, e.g. https://github.com/o/r/blob/<commit>/{path}; empty gives a path relative to a bundle at <repo>/okf/
+    file_times: tuple = ()      # ((path, ISO 8601 time the file last changed), ...) for sources[].last_modified; falls back to the commit time
     stale_files: tuple = ()     # source paths known to have changed since generation; their concepts get a past stale_after
     references: tuple = field(default_factory=tuple)  # extra bundles to mirror under references/: ((name, path), ...)
 
@@ -69,8 +72,18 @@ def q(v) -> str:
     return json.dumps(v, ensure_ascii=False)
 
 
+RESERVED = {"index", "log"}  # index.md and log.md mean something at any level (SPEC section 3.1), so a module of that name cannot be a concept file
+
+
 def mod_path(name: str) -> str:
-    return "/modules/" + name.replace("/", ".") + ".md"
+    stem = name.replace("/", ".")
+    return "/modules/" + (stem + "-module" if stem.lower() in RESERVED else stem) + ".md"
+
+
+def src_ref(path: str, cfg: "Config") -> str:
+    """A path-valued field (SPEC section 6.2): an absolute URL, or else a relative path from modules/ to the source.
+    A relative path means nothing once the bundle is mirrored into another repository, so give a bundle that will be mirrored a --source-url."""
+    return cfg.source_url.format(path=path) if cfg.source_url else "../../" + path
 
 
 def short(fqn: str) -> str:
@@ -195,13 +208,13 @@ def render(claims: list[dict], manifest: dict, cfg: Config = Config()) -> dict[s
         summaries[name] = desc
         fm = ["---", "type: Code Module", f"title: {q(name)}", f"description: {q(desc)}"]
         if cfg.meta == "native":
-            fm += [f"resource: {q('repo:' + files[0])}", f"tags: {q(['generated', 'code'])}"]
+            fm += [f"resource: {q(src_ref(files[0], cfg))}", f"tags: {q(['generated', 'code'])}"]
             fm += ["generated:", f"  by: {q(gen_by)}", f"  at: {q(commit_time or '1970-01-01T00:00:00Z')}"]
             if cfg.attest and all(c["confidence"] == "high" for c in used) and used:
                 fm += ["verified:", f"  - by: {q('process:kgen-extract')}", f"    at: {q(commit_time or '1970-01-01T00:00:00Z')}"]
             fm.append("sources:")
             for f in files:
-                fm += [f"  - resource: {q('repo:' + f)}", f"    id: {q(manifest.get('sources', {}).get(f, '')[:12])}", f"    last_modified: {q(commit_time or '1970-01-01T00:00:00Z')}"]
+                fm += [f"  - resource: {q(src_ref(f, cfg))}", f"    sha256: {q(manifest.get('sources', {}).get(f, ''))}", f"    last_modified: {q(dict(cfg.file_times).get(f) or commit_time or '1970-01-01T00:00:00Z')}"]
             fm.append("status: stable")
             if stale:
                 fm.append(f"stale_after: {q(stale)}")
@@ -220,7 +233,8 @@ def render(claims: list[dict], manifest: dict, cfg: Config = Config()) -> dict[s
             text = p.read_text(encoding="utf-8")
             if rel == "index.md":
                 text = re.sub(r"\A---\n.*?\n---\n\n?", "", text, count=1, flags=re.S)  # okf_version belongs to the root index only
-            out[f"references/{ref}/{rel}"] = text.replace("](/", f"](/references/{ref}/")  # bundle-relative links must stay inside the mirrored bundle
+            text = text.replace("](/", f"](/references/{ref}/")  # bundle-relative links must stay inside the mirrored bundle
+            out[f"references/{ref}/{rel}"] = text
     if cfg.index != "none":
         fm = ["---", f'okf_version: "{OKF_VERSION}"', "---", ""]
         lines = [f"# {manifest.get('name', 'Repository')} knowledge", ""]
@@ -236,8 +250,24 @@ def render(claims: list[dict], manifest: dict, cfg: Config = Config()) -> dict[s
     return out
 
 
+def remote_url_template(repo: Path, commit: str) -> str:
+    """https://github.com/<owner>/<repo>/blob/<commit>/{path} from the repo's origin, or '' when there is none."""
+    r = subprocess.run(["git", "-C", str(repo), "remote", "get-url", "origin"], text=True, capture_output=True)
+    m = re.match(r"^(?:https?://|git@|ssh://git@)([^/:]+)[/:](.+?)(?:\.git)?/?$", r.stdout.strip()) if r.returncode == 0 else None
+    return f"https://{m.group(1)}/{m.group(2)}/blob/{commit}/{{path}}" if m and commit else ""
+
+
 def write(repo: Path, dest: Path, cfg: Config) -> int:
     claims, manifest = load(repo)
+    if not cfg.file_times:
+        times = []
+        for path in sorted(manifest.get("sources", {})):
+            r = subprocess.run(["git", "-C", str(repo), "log", "-1", "--format=%cI", "--", path], text=True, capture_output=True)
+            if r.returncode == 0 and r.stdout.strip():
+                times.append((path, r.stdout.strip()))
+        cfg = replace(cfg, file_times=tuple(times))
+    if not cfg.source_url:
+        cfg = replace(cfg, source_url=remote_url_template(repo, manifest.get("source_commit") or ""))
     files = render(claims, manifest, cfg)
     dest.mkdir(parents=True, exist_ok=True)
     for rel, text in files.items():
