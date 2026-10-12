@@ -129,3 +129,8 @@ def test_routes_become_one_concept_and_java_packages_are_concepts(tmp_path: Path
     assert "/api/v1/items/{id}" in files["routes.md"] and "ItemController.get" in files["routes.md"]
     assert "`ItemController.name: String`" in files["modules/com.acme.web.md"]
     assert "ItemController.get(" in files["modules/com.acme.web.md"] and "[HTTP routes](/routes.md)" in files["index.md"]
+
+
+def test_pointer_asks_the_reader_to_say_when_it_relies_on_a_medium_entry_only_when_lines_are_tagged():
+    assert "relies on one, say so" not in okf.pointer(okf.Config())
+    assert "relies on one, say so" in okf.pointer(okf.Config(line_tags=True))
